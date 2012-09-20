@@ -26,6 +26,13 @@ button2 = gtk.Button("Button 2")
 button2.show()
 box1.pack_start(button2, True, True, 0)
 
+print "xxx"
+
+img = gtk.Image()
+img.set_from_file("../demo/logo.png")
+img.show()
+box1.pack_start(img, True, True, 0)
+
 window.show()
 gtk.main()
 
