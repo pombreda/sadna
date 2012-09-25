@@ -67,6 +67,10 @@ class ContainerAST(ControlAST):
     @property
     def direction(self):
         return self.root
+
+    @property
+    def kind(self):
+        return self.root
     
     @property
     def subelements(self):

@@ -1,11 +1,13 @@
+"""Module containing LEX/YACC parsing code for the Layyout-variety language.
 """
-Module containing LEX/YACC parsing code for the Layout-variety language.
-"""
+
 import re
 from ply import lex, yacc
-from dsl.ast import (ASTDict, AST, AtomicWidget, Literal, ContainerAST, ExpressionAST, 
-    ArithmeticExpression)
-from dsl import arithmetic_variety
+from dsl.ast import ASTDict, AST
+from dsl.ast import AtomicWidget, Literal
+from dsl.ast import ContainerAST
+from dsl.ast import ExpressionAST, ArithmeticExpression
+from dsl.arithmetic_parser import parse_expression
 
 reserved = {
     'otherwise': 'OTHERWISE'
@@ -240,7 +242,7 @@ def to_expression(expr):
   if isinstance(expr, (ExpressionAST, ArithmeticExpression)):
     return expr
   else:
-    return ArithmeticExpression(arithmetic_variety.parse_expression(expr))
+    return ArithmeticExpression(parse_expression(expr))
 
 def p_any_expression(p):
   '''any_expression : expression
@@ -430,5 +432,5 @@ if __name__ == '__main__':
                     --------------
                        ())
     """
-    print arithmetic_variety.parse_expression("5*a+9")
+    print parse_expression("5*a+9")
     print parse(test_code)

@@ -1,3 +1,3 @@
-from dsl.layout_variety import parse as parse_layout
-from dsl.arithmetic_variety import parse as parse_arithmetic
+from dsl.layout_parser import parse as parse_layout
+from dsl.arithmetic_parser import parse as parse_arithmetic
 
