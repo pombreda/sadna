@@ -2,30 +2,45 @@ import itertools
 from dsl import parse_layout
 from dsl.ast import ContainerAST, AtomicWidget, ExpressionAST, ArithmeticExpression
 
+import pygtk
+pygtk.require('2.0')
+import gtk
+
+gtk.widget_set_default_direction(gtk.TEXT_DIR_LTR)
+
+
 class CyclicDependency(Exception):
     pass
+
+
+class Variable(object):
+    _counter = itertools.count()
+    def __init__(self, name = None):
+        self.name = name
+        self.id = self._counter.next()
+    def __repr__(self):
+        return "var%d" % (self.id,)
+
+class Expr(object):
+    def __init__(self, op, lhs, rhs):
+        pass
+
 
 class UIElement(object):
     def __init__(self, attrs):
         self.attrs = attrs
-        if "width" not in self.attrs or self["width"] == "?":
-            self["width"] = None
-        if "height" not in self.attrs or self["height"] == "?":
-            self["height"] = None
+        if "width" not in self.attrs or self["width"] is None or self["width"] == "?":
+            self["width"] = None #Variable()
+        if "height" not in self.attrs or self["height"] is None or self["height"] == "?":
+            self["height"] = None #Variable()
     def __contains__(self, name):
         return name in self.attrs
     def __getitem__(self, name):
         return self.attrs[name]
     def __setitem__(self, name, value):
         self.attrs[name] = value
-
-class Variable(object):
-    _counter = itertools.count()
-    __slots__ = ["id"]
-    def __init__(self):
-        self.id = self._counter.next()
-    def __repr__(self):
-        return "v%d" % (self.id,)
+    def unify(self):
+        pass
 
 class Layout(UIElement):
     HOR = "H"
@@ -39,6 +54,26 @@ class Layout(UIElement):
     def __repr__(self):
         return "%s[%s, %s]" % (self.dir, ", ".join(repr(e) for e in self.subelems), 
             ", ".join("%s=%r" % (k, v) for k, v in self.attrs.items()))
+    def unify(self):
+        total_w = self["width"]
+        total_h = self["height"]
+        for e in self.subelems:
+            e.unify()
+        
+        widths = [e["width"] for e in self.subelems]
+        heights = [e["heights"] for e in self.subelems]
+        
+        if self.dir == self.HOR:
+            max_h = max(heights)
+            if max_h is None:
+                pass
+            else:
+                pass
+            
+        else:
+            pass
+        
+        
     
 
 class Padding(object):
@@ -53,10 +88,6 @@ class Atom(UIElement):
         self.name = name
     def __repr__(self):
         return "%s(%s)" % (self.name, ", ".join("%s=%r" % (k, v) for k, v in self.attrs.items()))
-    def unify(self):
-        w = self["width"] if self["width"] is None else Variable()
-        h = self["width"] if self["width"] is None else Variable()
-        return w, h
 
 
 def simplify_expression(node):
@@ -99,11 +130,18 @@ def ast_to_dom(doc):
             dom[name] = _ast_to_dom(dom, doc, node)
     return dom
 
+def run(dom):
+    window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+    window.set_title("Hello Buttons!")
+    window.connect("delete_event", lambda *args: False)
+    window.connect("destroy", lambda *args: gtk.main_quit())
+        
+
 
 
 if __name__ == "__main__":
     doc = parse_layout("""
-    foo <- (label)[text="hello"] | (label)[text="world"]
+    foo <- (label:20x20)[text="hello"] | (label)[text="world"]
     
     """)
     
