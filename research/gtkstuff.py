@@ -33,6 +33,11 @@ img.set_from_file("../demo/logo.png")
 img.show()
 box1.pack_start(img, True, True, 0)
 
+def on_conf(widget, event):
+    print "!!", widget, event
+
+window.connect("configure_event", on_conf)
+
 window.show()
 gtk.main()
 
