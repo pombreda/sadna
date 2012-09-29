@@ -19,6 +19,7 @@ class Control(object):
         self._on_change_callbacks = {}
         self._bound_funcs = {}
         self._widget = None
+        self._vars = {}
     
     def render(self, parent = None):
         if self._widget:
@@ -50,6 +51,20 @@ class Control(object):
     @ui_property
     def height(self, _):
         self._widget.resize(self.width, self.height)
+
+    @ui_property
+    def minwidth(self, value):
+        self._widget.setMinimumWidth(value)
+    @ui_property
+    def minheight(self, value):
+        self._widget.setMinimumHeight(value)
+
+    @ui_property
+    def maxwidth(self, value):
+        self._widget.setMaximumWidth(value)
+    @ui_property
+    def maxheight(self, value):
+        self._widget.setMaximumHeight(value)
     
     @ui_property
     def native_width(self, _): 
@@ -97,7 +112,6 @@ class Window(ControlContainer):
         wnd.closeEvent = self._handle_closed
         child = self.children[0]
         child.render(wnd)
-        print "setCentralWidget", child._widget
         wnd.setCentralWidget(child._widget)
         wnd.show()
         return wnd
@@ -178,7 +192,22 @@ class Label(Control):
         self._widget.setText(text)
         self._widget.adjustSize()
 
-class LineEdit(Control):
+class TextEditMixin(object):
+    @ui_property
+    def halign(self, alignment):
+        alignment = alignment.lower()
+        options = {"left" : QtCore.Qt.AlignLeft, "right" : QtCore.Qt.AlignRight, 
+            "center" : QtCore.Qt.AlignCenter}
+        self._widget.setAlignment(options[alignment])
+
+    @ui_property
+    def valign(self, alignment):
+        alignment = alignment.lower()
+        options = {"top" : QtCore.Qt.AlignTop, "bottom" : QtCore.Qt.AlignBottom, 
+            "middle" : QtCore.Qt.AlignMiddle}
+        self._widget.setAlignment(options[alignment])
+
+class LineEdit(Control, TextEditMixin):
     def _build(self, parent):
         le = QtGui.QLineEdit(parent)
         le.textChanged.connect(self._handle_change)
@@ -191,11 +220,11 @@ class LineEdit(Control):
     def text(self, text):
         self._widget.setText(unicode(text))
 
-class TextBox(Control):
+class TextBox(Control, TextEditMixin):
     def _build(self, parent):
-        le = QtGui.QPlainTextEdit(parent)
-        le.textChanged.connect(self._handle_change)
-        return le
+        te = QtGui.QPlainTextEdit(parent)
+        te.textChanged.connect(self._handle_change)
+        return te
     
     def _handle_change(self, text):
         self.text = unicode(text)
@@ -203,6 +232,17 @@ class TextBox(Control):
     @ui_property
     def text(self, text):
         self._widget.setText(unicode(text))
+
+class Image(Control):
+    def _build(self, parent):
+        lbl = QtGui.QLabel(parent)
+        return lbl
+    
+    @ui_property
+    def image(self, filename):
+        pximap = QtGui.QPixmap(filename)
+        self._widget.setPixmap(pximap)
+        self._widget.adjustSize()
 
 
 if __name__ == "__main__":
@@ -217,9 +257,9 @@ if __name__ == "__main__":
             HBox([
                 Label(text = "Last name"),
                 LineEdit(), 
-            ])
+            ]),
         ]),
-        title = "foo", width = 700, height = 200)
+        title = "foo", width = 400, height = 200)
     w2.render()
     app.exec_()
 
