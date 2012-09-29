@@ -6,7 +6,7 @@ def build():
     okButton = QtGui.QPushButton("OK")
     cancelButton = QtGui.QPushButton("Cancel")
     okButton.clicked.connect(buttonClicked)
-
+    
     hbox = QtGui.QHBoxLayout()
     hbox.addStretch(1)
     hbox.addWidget(okButton)
@@ -17,8 +17,12 @@ def build():
     vbox.addLayout(hbox)
     self.setLayout(vbox)    
     
-    self.setGeometry(300, 300, 300, 150)
-    self.setWindowTitle('Buttons')    
+    self.resize(300, 150)
+    self.setWindowTitle('Buttons')
+    def on_res(ev):
+        print ev.size()
+        print self.sizeHint().width()
+    self.resizeEvent = on_res
     self.show()
     return self
     
@@ -28,9 +32,9 @@ def buttonClicked():
 
 if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
-    print dir(app)
     ex = build()
-    app.processEvents()
+    #print dir(ex)
+    app.exec_()
 
 
 

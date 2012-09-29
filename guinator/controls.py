@@ -1,9 +1,6 @@
-import pygtk
-pygtk.require('2.0')
-import gtk
-import gobject
+import sys
+from PyQt4 import QtCore, QtGui
 
-gtk.widget_set_default_direction(gtk.TEXT_DIR_LTR)
 
 def ui_property(func):
     def getter(self):
@@ -17,46 +14,59 @@ def ui_property(func):
 
 class Control(object):
     def __init__(self, **attrs):
+        self._future_attrs = attrs
         self._attrs = {}
         self._on_change_callbacks = {}
         self._bound_funcs = {}
-        self._gtkobj = self._build()
-        self._attrs["native_width"], self._attrs["native_height"] = self._gtkobj.size_request()
-        if hasattr(self._gtkobj, "get_size"):
-            self._attrs["width"], self._attrs["height"] = self._gtkobj.get_size()
+        self._widget = None
+    
+    def render(self, parent = None):
+        if self._widget:
+            return
+        self._widget = self._build(parent)
+        self._widget.setObjectName(repr(self))
+        size = self._widget.sizeHint()
+        self._attrs["native_width"] = size.width()
+        self._attrs["native_height"] = size.height()
+        if hasattr(self._widget, "size"):
+            size = self._widget.size()
+            self._attrs["width"] = size.width()
+            self._attrs["height"] = size.height()
         else:
             self._attrs["width"] = self._attrs["native_width"]
             self._attrs["height"] = self._attrs["native_height"]
-        for k, v in attrs.items():
+        self._super_resizeEvent = self._widget.resizeEvent
+        self._widget.resizeEvent = self._handle_resized
+        for k, v in self._future_attrs.items():
             setattr(self, k, v)
-        #self._gtkobj.connect("configure_event", self._handle_configure)
-        self._gtkobj.connect("size-allocate", self._handle_configure)
-        self._gtkobj.show()
+        del self._future_attrs
     
-    def _build(self):
+    def _build(self, parent):
         raise NotImplementedError()
 
     @ui_property
     def width(self, _):
-        #self._gtkobj.set_size_request(self.width, self.height)
-        pass 
+        self._widget.resize(self.width, self.height)
     @ui_property
     def height(self, _):
-        pass
-        #self._gtkobj.set_size_request(self.width, self.height) 
+        self._widget.resize(self.width, self.height)
     
     @ui_property
-    def native_width(self, _): pass
+    def native_width(self, _): 
+        raise TypeError("cannot set native_width")
     @ui_property
-    def native_height(self, _): pass
+    def native_height(self, _): 
+        raise TypeError("cannot set native_height")
 
     def _on_changed(self, attr):
         for callback in self._on_change_callbacks.get(attr, ()):
             callback(self._attrs[attr])
 
-    def _handle_configure(self, widget, event):
-        self.width = event.width
-        self.height = event.height
+    def _handle_resized(self, event):
+        self._super_resizeEvent(event)
+        self.width = event.size().width()
+        self.height = event.size().height()
+        #self._widget.adjustSize()
 
     #
     # API
@@ -65,7 +75,7 @@ class Control(object):
         if attr not in self._on_change_callbacks:
             self._on_change_callbacks[attr] = []
         self._on_change_callbacks[attr].append(callback)
-        
+    
     def set(self, attr, value):
         setattr(self, attr, value)
     
@@ -81,122 +91,137 @@ class Window(ControlContainer):
     def __init__(self, child, **attrs):
         ControlContainer.__init__(self, [child], **attrs)
     
-    def _build(self):
-        wnd = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        wnd.connect("delete_event", lambda *args: False)
-        wnd.connect("destroy", self._handle_destroy)
+    def _build(self, parent):
         assert len(self.children) == 1
-        wnd.add(self.children[0]._gtkobj)
+        wnd = QtGui.QMainWindow()
+        wnd.closeEvent = self._handle_closed
+        child = self.children[0]
+        child.render(wnd)
+        print "setCentralWidget", child._widget
+        wnd.setCentralWidget(child._widget)
+        wnd.show()
         return wnd
-
-    def _handle_destroy(self, widget, *_):
+    
+    def _handle_closed(self, event):
         self.closed = 1
         self.closed = 0
-        gtk.main_quit()
+        event.accept()
+        #QtGui.QApplication.instance().quit()
 
-    @ui_property
-    def width(self, _):
-        pass
-        #self._gtkobj.resize(self.width, self.height)
-    @ui_property
-    def height(self, _):
-        pass
-        #self._gtkobj.resize(self.width, self.height)
     @ui_property
     def closed(self, _):
         pass
     @ui_property
     def title(self, text):
-        self._gtkobj.set_title(text)
+        self._widget.setWindowTitle(text)
 
-class Glider(ControlContainer):
-    GTK_CLASS = None
+class Splitter(ControlContainer):
+    ORIENATATION = None
 
-    def _rec_build(self, children):
-        if not children:
-            raise ValueError("children cannot be empty")
-        elif len(children) == 1:
-            pane = children[0]
-        elif len(children) == 2:
-            pane = self.GTK_CLASS()
-            f1 = gtk.Frame()
-            f1.set_shadow_type(gtk.SHADOW_ETCHED_IN)
-            f1.add(children[0]._gtkobj)
-            f1.show()
-            f2 = gtk.Frame()
-            f2.set_shadow_type(gtk.SHADOW_ETCHED_IN)
-            f2.add(children[1]._gtkobj)
-            f2.show()
-            pane.add1(f1)
-            pane.add2(f2)
-        else:
-            pane = self.GTK_CLASS()
-            f1 = gtk.Frame()
-            f1.set_shadow_type(gtk.SHADOW_ETCHED_IN)
-            f1.add(children[0]._gtkobj)
-            f1.show()
-            pane.add1(f1)
-            pane.add2(self._rec_build(children[1:]))
-        return pane
+    def _build(self, parent):
+        splitter = QtGui.QSplitter(self.ORIENATATION, parent)
+        for child in self.children:
+            child.render(splitter)
+            splitter.addWidget(child._widget)
+        return splitter
 
-    def _build(self):
-        return self._rec_build(self.children)
+class HSplitter(Splitter):
+    ORIENATATION = QtCore.Qt.Horizontal
 
-class HGlider(Glider):
-    GTK_CLASS = gtk.HPaned
-
-class VGlider(Glider):
-    GTK_CLASS = gtk.VPaned
+class VSplitter(Splitter):
+    ORIENATATION = QtCore.Qt.Vertical
 
 class Box(ControlContainer):
-    GTK_CLASS = None
+    WIDGET_CLASS = None
     
-    def _build(self):
-        box = self.GTK_CLASS()
+    def _build(self, parent):
+        widget = QtGui.QWidget(parent)
+        box = self.WIDGET_CLASS()
+        widget.setLayout(box)
         for child in self.children:
-            box.pack_start(child._gtkobj)
-        return box
+            child.render(widget)
+            box.addWidget(child._widget)
+        return widget
 
 class HBox(Box):
-    GTK_CLASS = gtk.HBox
+    WIDGET_CLASS = QtGui.QHBoxLayout
 
 class VBox(Box):
-    GTK_CLASS = gtk.VBox
-
+    WIDGET_CLASS = QtGui.QVBoxLayout
 
 class Button(Control):
-    def _build(self):
-        btn = gtk.Button()
-        btn.connect("clicked", self._handle_click)
+    def _build(self, parent):
+        btn = QtGui.QPushButton(parent)
+        btn.clicked.connect(self._handle_click)
         return btn
     
-    def _handle_click(self, widget, *_):
+    def _handle_click(self):
         self.clicked = 1
         self.clicked = 0
     
     @ui_property
     def text(self, text):
-        self._gtkobj.set_text(text)
+        self._widget.setText(text)
+        self._widget.adjustSize()
 
     @ui_property
-    def clicked(self, _):
+    def clicked(self, _): 
         pass
 
-
 class Label(Control):
-    def _build(self):
-        lbl = gtk.Label()
+    def _build(self, parent):
+        lbl = QtGui.QLabel(parent)
         return lbl
     
     @ui_property
     def text(self, text):
-        self._gtkobj.set_text(text)
+        self._widget.setText(text)
+        self._widget.adjustSize()
 
+class LineEdit(Control):
+    def _build(self, parent):
+        le = QtGui.QLineEdit(parent)
+        le.textChanged.connect(self._handle_change)
+        return le
+    
+    def _handle_change(self, text):
+        self.text = unicode(text)
+    
+    @ui_property
+    def text(self, text):
+        self._widget.setText(unicode(text))
+
+class TextBox(Control):
+    def _build(self, parent):
+        le = QtGui.QPlainTextEdit(parent)
+        le.textChanged.connect(self._handle_change)
+        return le
+    
+    def _handle_change(self, text):
+        self.text = unicode(text)
+    
+    @ui_property
+    def text(self, text):
+        self._widget.setText(unicode(text))
 
 
 if __name__ == "__main__":
-    w = Window(HGlider([Label(text = "hello"), Label(text = "world")]), title = "foo")
-    gtk.main()
+    app = QtGui.QApplication(sys.argv)
+    app.setStyle(QtGui.QStyleFactory.create('Cleanlooks'))
+
+    w2 = Window(VSplitter([
+            HBox([
+                Label(text = "First name"),
+                LineEdit(),
+            ]),
+            HBox([
+                Label(text = "Last name"),
+                LineEdit(), 
+            ])
+        ]),
+        title = "foo", width = 700, height = 200)
+    w2.render()
+    app.exec_()
 
 
 
