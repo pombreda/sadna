@@ -1,5 +1,7 @@
 from decimal import Decimal
 from matrix_solver import Matrix
+
+
 scalar_types = (int, long, float, Decimal)
 
 class LinearMixin(object):
@@ -11,6 +13,8 @@ class LinearMixin(object):
         return LinSum(other, self)
     def __sub__(self, other):
         return self + (-1 * other)
+    def __rsub__(self, other):
+        return other + (-1 * self)
     def __neg__(self):
         return -1 * self
 
@@ -47,7 +51,12 @@ class Coeff(LinearMixin):
             self.var = var
             self.coeff = scalar
     def __repr__(self):
-        return "%r%r" % (self.coeff, self.var)
+        if self.coeff == 1:
+            return repr(self.var)
+        elif self.coeff == 0:
+            return "0"
+        else:
+            return "%r%r" % (self.coeff, self.var)
 
 class LinSum(LinearMixin):
     def __init__(self, *elements):
@@ -70,7 +79,12 @@ class LinSum(LinearMixin):
 
 class LinSys(object):
     def __init__(self, *equations):
-        self.equations = equations
+        self.equations = list(equations)
+    def append(self, equation):
+        self.equations.append(equation)
+    def __str__(self):
+        return "\n".join(repr(eq) for eq in self.equations)
+    
     def to_matrix(self):
         vars_indexes = {}
         equations = []
@@ -112,9 +126,12 @@ if __name__ == "__main__":
         2 * a + 7 * b - 2 | 9 + 2 * b,
         4 * a             | b + 11,
     )
-    
     print ls.solve()
-    
-    
+
+    ls2 = LinSys(
+        a + b | 7,
+    )
+    print ls2.solve()
+
 
 
