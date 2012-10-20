@@ -20,6 +20,8 @@ class UIElement(object):
         self.height = LinVar("h%d" % (self.id,))
         self.width_constraint = UNSPEC
         self.height_constraint = UNSPEC
+        self.widget = None
+        self.attrs = {}
     def X(self, width_constraint, height_constraint):
         if width_constraint is not UNSPEC:
             self.width_constraint = width_constraint
@@ -39,11 +41,15 @@ class UIElement(object):
             yield LinEq(self.width, self.width_constraint)
         if self.height_constraint is not UNSPEC:
             yield LinEq(self.height, self.height_constraint)
+    
+    def __getitem__(self, attrdict):
+        self.attrs.update(attrdict)
+        return self
 
 class Widget(UIElement):
     def __init__(self, **attrs):
         UIElement.__init__(self)
-        self.attrs = attrs
+        self.attrs.update(attrs)
     def __repr__(self):
         return "%s(%s)" % (self.__class__.__name__, ", ".join("%s = %r" % (k, v) for k, v in self.attrs.items()))
 
@@ -70,6 +76,7 @@ class Stack(UIElement):
 
 class VStack(Stack):
     pass
+
 class HStack(Stack):
     def get_constraints(self):
         for c in Stack.get_constraints(self):
@@ -83,20 +90,28 @@ class HStack(Stack):
             yield LinEq(e.height, self.height)
     
     def render(self, solution):
-        box = gtk.HBox()
-        box.show()
-        for e in self.elems:
-            box.pack_start(e.render(solution), False, False)
-        box.set_size_request(solution[self.width.name], solution[self.height.name])
-        return box
+        if self.widget is None:
+            self.widget = gtk.HBox()
+            self.widget.show()
+            for e in self.elems:
+                if self.width.name not in solution:
+                    pass
+                
+                self.widget.pack_start(e.render(solution), False, False)
+        else:
+            for e in self.elems:
+                e.render(solution)
+        self.widget.set_size_request(solution[self.width.name], solution[self.height.name])
+        return self.widget
 
 
 class Label(Widget):
     def render(self, solution):
-        lbl = gtk.Label(self.attrs["text"])
-        lbl.show()
-        lbl.set_size_request(solution[self.width.name], solution[self.height.name])
-        return lbl
+        if self.widget is None:
+            self.widget = gtk.Label(self.attrs["text"])
+            self.widget.show()
+        self.widget.set_size_request(solution[self.width.name], solution[self.height.name])
+        return self.widget
 
 class Text(Widget):
     pass
@@ -108,7 +123,7 @@ class Button(Widget):
 
 def render(root):
     window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-    window.set_title("Hello World")
+    window.set_title(root.attrs.get("title", "Untitled"))
     window.connect("delete_event", lambda *args: False)
     window.connect("destroy", lambda *args: gtk.main_quit())
     if not root.width_constraint:
@@ -119,7 +134,6 @@ def render(root):
         fixed_size = True
     
     linsys = LinSys(*root.get_constraints())
-    print linsys
     solution = linsys.solve()
     print solution
     #solution["window-width"] = lambda: window.get_size()[0]
@@ -138,9 +152,9 @@ def render(root):
 
 if __name__ == "__main__":
     x = LinVar("x")
-    l1 = Label(text = "hello").X(x, UNSPEC)
-    l2 = Label(text = "world").X(x, UNSPEC)
-    p = (l1 | l2) #.X(600, 200)
+    p = (
+            Label(text = "hello").X(x, UNSPEC) | Label(text = "world").X(x, UNSPEC)
+        ).X(600, 200)[{"title" : "Hello world"}]
     print p
     
     render(p)
