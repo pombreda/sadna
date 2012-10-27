@@ -96,7 +96,7 @@ class FreeVar(ExprMixin):
     def __repr__(self):
         return "<FreeVar %s>" % (self,)
     def __str__(self):
-        return self.name
+        return str(self.name)
 
 def solve_matrix(mat, variables):
     m, n = mat.shape
@@ -164,6 +164,15 @@ class LinVar(LinearMixin):
         self.type = type
     def __repr__(self):
         return self.name
+    def __eq__(self, other):
+        if isinstance(other, LinVar):
+            return self.name == other.name
+        else:
+            return self.name == other
+    def __ne__(self, other):
+        return not (self.name == other.name)
+    def __hash__(self):
+        return hash(self.name)
 
 class NonLinVar(object):
     def __init__(self, name):
@@ -276,7 +285,7 @@ class LinSys(object):
     
     def solve(self):
         matrix, vars = self.to_matrix()
-        return solve_matrix(matrix, [v.name for v in vars])
+        return solve_matrix(matrix, vars)
 
 
 if __name__ == "__main__":
