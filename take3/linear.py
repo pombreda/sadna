@@ -1,6 +1,5 @@
 import itertools
 import numpy
-from decimal import Decimal
 
 EPSILON = 1e-50
 scalar_types = (int, long, float)
@@ -57,6 +56,7 @@ def mul(a,b):
 mul.__name__ = "*"
 
 class ExprMixin(object):
+    __slots__ = []
     def __mul__(self, other):
         if isinstance(other, scalar_types) and abs(other) <= EPSILON:
             return 0.0
@@ -75,6 +75,7 @@ class ExprMixin(object):
         return BinExpr(sub, other, self)
 
 class BinExpr(ExprMixin):
+    __slots__ = ["op", "lhs", "rhs"]
     def __init__(self, op, lhs, rhs):
         self.op = op
         self.lhs = lhs
@@ -84,11 +85,10 @@ class BinExpr(ExprMixin):
         rv = self.rhs.eval(freevars) if hasattr(self.rhs, "eval") else self.rhs
         return self.op(lv, rv)
     def __repr__(self):
-        return "<BinExpr %s>" % (self,)
-    def __str__(self):
         return "(%s %s %s)" % (self.lhs, self.op.__name__, self.rhs)
 
 class FreeVar(ExprMixin):
+    __slots__ = ["name"]
     def __init__(self, name):
         self.name = name
     def eval(self, freevars):
@@ -128,6 +128,7 @@ def solve_matrix(mat, variables):
 # linear systems
 #===================================================================================================
 class LinearMixin(object):
+    __slots__ = []
     def __add__(self, other):
         return LinSum(self, other)
     def __radd__(self, other):
@@ -138,13 +139,13 @@ class LinearMixin(object):
         return other + (-1 * self)
     def __neg__(self):
         return -1 * self
-
     def __mul__(self, scalar):
         return Coeff(self, scalar)
     def __rmul__(self, scalar):
         return Coeff(self, scalar)
 
 class LinEq(object):
+    __slots__ = ["lhs", "rhs"]
     def __init__(self, lhs, rhs):
         if not isinstance(lhs, LinSum):
             lhs = LinSum(lhs)
@@ -156,12 +157,21 @@ class LinEq(object):
         return "%r = %r" % (self.lhs, self.rhs)
 
 class LinVar(LinearMixin):
-    def __init__(self, name):
+    __slots__ = ["name", "owner", "type"]
+    def __init__(self, name, owner = None, type = None):
         self.name = name
+        self.owner = owner
+        self.type = type
     def __repr__(self):
         return self.name
 
+class NonLinVar(object):
+    def __init__(self, name):
+        pass
+
+
 class Coeff(LinearMixin):
+    __slots__ = ["var", "coeff"]
     def __init__(self, var, scalar):
         if not isinstance(scalar, scalar_types):
             raise TypeError("%r is not a scalar" % (scalar,))
@@ -182,6 +192,7 @@ class Coeff(LinearMixin):
             return "%r%r" % (self.coeff, self.var)
 
 class LinSum(LinearMixin):
+    __slots__ = ["elements"]
     def __init__(self, *elements):
         self.elements = []
         for elem in elements:
@@ -201,6 +212,7 @@ class LinSum(LinearMixin):
         return iter(self.elements)
 
 class LinSys(object):
+    __slots__ = ["equations"]
     def __init__(self, equations):
         self.equations = equations
     def append(self, equation):
@@ -254,7 +266,7 @@ class LinSys(object):
                     varbins[v.var] += v.coeff
             equations.append((varbins.items(), scalars))
         
-        matrix = numpy.zeros((len(equations), len(vars_indexes) + 1), numpy.float64)
+        matrix = numpy.zeros((len(equations), len(vars_indexes) + 1), float)
         for i, (vars, scalar) in enumerate(equations):
             matrix[i, -1] = scalar
             for v, coeff in vars:
