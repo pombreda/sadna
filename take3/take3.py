@@ -4,67 +4,19 @@ pygtk.require('2.0')
 import gtk
 gtk.widget_set_default_direction(gtk.TEXT_DIR_LTR)
 
+from linear import LinVar, LinEq, LinSys, NoSolutionsExist
 
-class LinearMixin(object):
-    def __neg__(self):
-        return -1 * self
-    def __sub__(self, other):
-        return self + (-other)
-    def __rsub__(self, other):
-        return other + (-self)
-    def __add__(self, other):
-        return SumExpr(self, other)
-    def __radd__(self, other):
-        return SumExpr(other, self)
-    def __mul__(self, scalar):
-        return ScalarExpr(scalar, self)
-    def __rmul__(self, scalar):
-        return ScalarExpr(scalar, self)
-    def __or__(self, other):
-        return LinEquation(self, other)
-    def __ror__(self, other):
-        return LinEquation(other, self)
-
-class Var(LinearMixin):
-    def __init__(self, name, owner = None, type = None):
-        self.name = name
-        self.owner = owner
-        self.type = type
-    def __repr__(self):
-        return self.name
-
-class SumExpr(LinearMixin):
-    def __init__(self, lhs, rhs):
+class HardLinEq(LinEq):
+    pass
+class SoftLinEq(LinEq):
+    def __init__(self, lhs, rhs, resolver):
         self.lhs = lhs
         self.rhs = rhs
+        self.resolver = resolver
     def __repr__(self):
-        if self.lhs == 0:
-            return str(self.rhs)
-        elif self.rhs == 0:
-            return str(self.lhs)
-        else:
-            return "%s + %s" % (self.lhs, self.rhs)
-
-class ScalarExpr(LinearMixin):
-    def __init__(self, scalar, var):
-        self.scalar = scalar
-        self.var = var
-    def __repr__(self):
-        if self.scalar == 0:
-            return "0"
-        elif self.scalar == 1:
-            return str(self.var)
-        elif self.scalar == -1:
-            return "-%s" % (self.var,)
-        else:
-            return "%s%s" % (self.scalar, self.var)
-
-class LinEquation(object):
-    def __init__(self, lhs, rhs):
-        self.lhs = lhs
-        self.rhs = rhs
-    def __repr__(self):
-        return "%s = %s" % (self.lhs, self.rhs)
+        return "! %s" % (LinEq.__repr__(self),)
+    def resolve(self, prev_sol):
+        return self.resolver(self, prev_sol)
 
 
 class UIElement(object):
@@ -72,8 +24,10 @@ class UIElement(object):
     def __init__(self, **attrs):
         self.attrs = attrs
         self.id = self._counter.next()
-        self.w = Var("w%d" % (self.id,), self, "v")
-        self.h = Var("h%d" % (self.id,), self, "h")
+        self.w = LinVar("w%d" % (self.id,))
+        self.h = LinVar("h%d" % (self.id,))
+        self.w.owner = self
+        self.h.owner = self
         self.attrs["w_constraint"] = None
         self.attrs["h_constraint"] = None
         self.elems = []
@@ -87,7 +41,7 @@ class UIElement(object):
             return "%s[%s]" % (self.__class__.__name__, attrs)
         else:
             return "%s(%s)" % (self.__class__.__name__, elems)
-                
+
     def __getitem__(self, attrs):
         self.attrs.update(attrs)
     def __or__(self, other):
@@ -102,9 +56,9 @@ class UIElement(object):
         return self
     def get_constraints(self):
         if self.attrs["w_constraint"]:
-            yield self.w | self.attrs["w_constraint"]
+            yield HardLinEq(self.w, self.attrs["w_constraint"])
         if self.attrs["h_constraint"]:
-            yield self.h | self.attrs["h_constraint"]
+            yield HardLinEq(self.h, self.attrs["h_constraint"])
         for e in self.elems:
             for cons in e.get_constraints():
                 yield cons
@@ -136,12 +90,19 @@ class Hor(Layout):
     def get_constraints(self):
         for cons in Layout.get_constraints(self):
             yield cons
-        yield LinEquation(sum(e.w for e in self.elems), self.w, self.resolve)
+        yield SoftLinEq(sum(e.w for e in self.elems), self.w, self._resolve_width)
         for e in self.elems:
-            yield LinEquation(e.h, self.h, self.resolve)
+            hp = LinVar("hp%d" % (e.id,))
+            #hp.owner = self
+            yield SoftLinEq(e.h + hp, self.h, self._resolve_height)
     
-    def resolve(self):
-        pass
+    def _resolve_width(self, equation, prev_sol):
+        1/0
+    def _resolve_height(self, equation, prev_sol):
+        1/0
+    
+    def get_widget(self):
+        return gtk.Scrolled()
 
 
 class Ver(Layout):
@@ -154,32 +115,50 @@ class Label(Atom):
 class Button(Atom):
     pass
 
-def run(root):
-    window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-    window.set_title("Untitled")
-    window.connect("delete_event", lambda *args: False)
-    window.connect("destroy", lambda *args: gtk.main_quit())
-    w = Var("window_width")
-    h = Var("window_height")
-    root.X(w, h)
+#def run(root):
+#    window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+#    window.set_title("Untitled")
+#    window.connect("delete_event", lambda *args: False)
+#    window.connect("destroy", lambda *args: gtk.main_quit())
+#    w = LinVar("window_width")
+#    h = LinVar("window_height")
+#    root.X(w, h)
     
 
-x = Var("x")
-main = (Label(text = "foo").X(x,None) | Label(text = "bar").X(x,None)) 
-
-print list(main.get_constraints())
+x = LinVar("x")
+main = (Label(text = "foo").X(50,50) | Label(text = "bar").X(50,50) | Label(text = "spam").X(50,60)).X(None,60)
 
 
+def unify(root):
+    constraints = list(root.get_constraints())
+    required = [cons for cons in constraints if isinstance(cons, HardLinEq)]
+    desired = [cons for cons in constraints if isinstance(cons, SoftLinEq)]
+    linsys = LinSys(required)
+    # if this fails - the user made a booboo
+    sol = linsys.solve()
+
+    # make sure to add these last, so they'd be free vars. if they turn out bound, the window 
+    # must be non-resizable
+    w = LinVar("WW")
+    h = LinVar("WH")
+    #if not root.attrs["w_constraint"]:
+    desired.append(SoftLinEq(root.w, w, None))
+    #if not root.attrs["h_constraint"]:
+    desired.append(SoftLinEq(root.h, h, None))
+
+    for cons in desired:
+        linsys.append(cons)
+        try:
+            sol = linsys.solve()
+        except NoSolutionsExist:
+            del linsys[-1]
+            linsys.extend(cons.resolve(sol))
+            sol = linsys.solve()
+    
+    return sol
 
 
-
-
-
-
-
-
-
-
+print unify(main)
 
 
 

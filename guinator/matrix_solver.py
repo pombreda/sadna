@@ -142,9 +142,10 @@ class FreeVar(ExprMixin):
 #===================================================================================================
 if __name__ == "__main__":
     m = Matrix([1,2,4,2], [3,7,6,8])
-    sol = m.solve(["x", "y", "z"])
-    print sol
-    print sol["x"].eval({"z" : 10})
+    print m.eliminate()
+    #sol = m.solve(["x", "y", "z"])
+    #print sol
+    #print sol["x"].eval({"z" : 10})
     
 
 
