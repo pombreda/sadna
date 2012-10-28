@@ -1,8 +1,8 @@
 import itertools
-from linear import LinVar, LinEq, LinSys, FreeVar
+from linear import LinVar, LinEq, LinSys, FreeVar, BinExpr
 
 
-class LinearElement(object):
+class LinearConstraint(object):
     _counter = itertools.count()
     def __init__(self, elems = (), **attrs):
         self.attrs = attrs
@@ -51,9 +51,9 @@ class LinearElement(object):
 #===================================================================================================
 # Layout combinators
 #===================================================================================================
-class Layout(LinearElement):
+class Layout(LinearConstraint):
     def __init__(self, elems, **attrs):
-        LinearElement.__init__(self, elems, **attrs)
+        LinearConstraint.__init__(self, elems, **attrs)
         self.scroller = LinVar("scroller%d" % (self.id,), self, "overflow")
         self.padders = {}
     
@@ -100,9 +100,9 @@ class VLayout(Layout):
 #===================================================================================================
 # Atoms
 #===================================================================================================
-class Atom(LinearElement):
+class Atom(LinearConstraint):
     def __init__(self, **attrs):
-        LinearElement.__init__(self, **attrs)
+        LinearConstraint.__init__(self, **attrs)
 
 class Label(Atom):
     pass
@@ -127,56 +127,86 @@ class Slider(Atom):
 #===================================================================================================
 # APIs
 #===================================================================================================
-def unify(root):
-    linsys = LinSys(list(root.get_constraints()))
-    ww = LinVar("WindowWidth", None, "input")
-    wh = LinVar("WindowHeight", None, "input")
-    linsys.append(LinEq(root.w, ww))
-    linsys.append(LinEq(root.h, wh))
-    return linsys.solve()
-
-def enum_freevars(solution):
-    for k, v in solution.items():
-        if isinstance(v, FreeVar):
-            yield k
-
-def evaluate(solution, freevars):
-    output = {}
+class DependencySolver(object):
+    def __init__(self, root):
+        self.root = root
+        self.solution = self._unify()
+        self.dependencies = self._calculate_dependencies()
+        self.results = {}
     
-    class RecEvalDict(object):
-        def __getitem__(self, key):
-            return rec_eval(key)
-    rec_eval_dict = RecEvalDict()
+    def _unify(self):
+        linsys = LinSys(list(self.root.get_constraints()))
+        ww = LinVar("WindowWidth", None, "input")
+        wh = LinVar("WindowHeight", None, "input")
+        linsys.append(LinEq(self.root.w, ww))
+        linsys.append(LinEq(self.root.h, wh))
+        return linsys.solve()
 
-    def rec_eval(key):
-        if key in output:
-            if output[key] is NotImplemented:
-                raise ValueError("cyclic dependency found")
-            return output[key]
-        # set up sentinel to detect cycles
-        output[key] = NotImplemented
-        v = solution[key]
-        if isinstance(v, FreeVar):
-            output[key] = freevars[key]
-        elif hasattr(v, "eval"):
-            output[key] = v.eval(rec_eval_dict)
+    def _get_freevars(self):
+        for k, v in self.solution.items():
+            if isinstance(v, FreeVar):
+                yield k
+    
+    def _get_equation_vars(self, expr):
+        if isinstance(expr, (str, LinVar, FreeVar)):
+            return {expr.name}
+        elif isinstance(expr, BinExpr):
+            return self._get_equation_vars(expr.lhs) | self._get_equation_vars(expr.rhs)
         else:
-            output[key] = v
-        return output[key]
+            return set()
     
-    for k in solution:
-        rec_eval(k)
-    return output
+    def _transitive_closure(self, deps):
+        oldlen = -1
+        while oldlen != len(deps):
+            oldlen = len(deps)
+            for resvar, expr in self.solution.items():
+                depvars = self._get_equation_vars(expr)
+                if deps & depvars:
+                    deps.add(resvar)
+    
+    def _calculate_dependencies(self):
+        dependencies = {}
+        for var in self._get_freevars():
+            dependencies[var] = {var}
+            self._transitive_closure(dependencies[var])
+        return dependencies
+    
+    def eval(self, freevars):
+        for k in freevars.keys():
+            self.results.pop(k, None)
+        
+        class RecEvalDict(object):
+            def __getitem__(self, key):
+                return rec_eval(key)
+        rec_eval_dict = RecEvalDict()
+    
+        def rec_eval(key):
+            if key in self.results:
+                if self.results[key] is NotImplemented:
+                    raise ValueError("cyclic dependency found")
+                return self.results[key]
+            # set up sentinel to detect cycles
+            self.results[key] = NotImplemented
+            v = self.solution[key]
+            if isinstance(v, FreeVar):
+                self.results[key] = freevars[key]
+            elif hasattr(v, "eval"):
+                self.results[key] = v.eval(rec_eval_dict)
+            else:
+                self.results[key] = v
+            return self.results[key]
+        
+        for k in self.solution:
+            rec_eval(k)
+        return self.results
 
 
 if __name__ == "__main__":
     x = LinVar("x")
     root = (Label(text = "foo").X(x,50) | Label(text = "bar").X(2 * x,50) | Label(text = "spam").X(50,60)).X(None, 100)
-    sol = unify(root)
-    print sol
-    ev = evaluate(sol, {"WindowWidth" : 300, "scroller2" : 150})
-    print ev
-
+    depsol = DependencySolver(root)
+    print depsol.eval({"WindowWidth" : 300, "scroller2" : 150})
+    print depsol.eval({"WindowWidth" : 500})
 
 
 

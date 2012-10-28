@@ -59,7 +59,10 @@ class UIElement(object):
             self._gtkobj.hide()
             # TODO: set width, height = 0
 
-class HLayout(UIElement):
+class Layout(UIElement):
+    pass
+
+class HLayout(Layout):
     def _build(self):
         self._box = gtk.Layout()
         for e in self.elems:
@@ -121,7 +124,8 @@ class Button(UIElement):
 
 
 
-
+if __name__ == "__main__":
+    pass
 
 
 
