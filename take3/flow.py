@@ -5,27 +5,32 @@ gtk.widget_set_default_direction(gtk.TEXT_DIR_LTR)
 
 
 class UIProperty(property):
-    __slots = []
-    def __new__(cls, func):
+    pass
+
+def ui_property(default = None):
+    def deco(func):
         def getter(self):
-            return self._attrs[func.__name__]
+            return self._attrs.get(func.__name__, default)
         def setter(self, val):
-            if val != self.attrs.get(func.__name__):
+            if val != self._attrs.get(func.__name__, default):
                 self._attrs[func.__name__] = val
                 func(self, val)
                 self._on_changed(func.__name__)
-        return property.__new__(cls, getter, setter, doc = func.__doc__)
+        prop = UIProperty(getter, setter, doc = func.__doc__)
+        prop.default = default
+        prop.name = func.__name__
+        return prop
+    return deco
 
 
 class UIElement(object):
     def __init__(self, **attrs):
-        self._attrs = {}
+        self._attrs = {v.name : v.default for cls in reversed(type(self).mro()) 
+            for k, v in cls.__dict__.items() if isinstance(v, UIProperty)}
         self._observers = {}
         self._gtkobj = self._build()
-        allowed_attrs = {k for cls in type(self).mro() for k, v in cls.__dict__.items() 
-            if isinstance(v, UIProperty)}
-        for k, v in self.attrs:
-            if k not in allowed_attrs:
+        for k, v in attrs.items():
+            if k not in self._attrs:
                 raise ValueError("Unknown attribute %r" % (k,))
             setattr(self, k, v)
         self._gtkobj.connect("size-allocate", self._handle_configure)
@@ -44,13 +49,13 @@ class UIElement(object):
         self.width = evt.width
         self.height = evt.height
         
-    @UIProperty
+    @ui_property()
     def width(self, val):
         """gets/sets the widget's width"""
-    @UIProperty
+    @ui_property()
     def height(self, val):
         """gets/sets the widget's height"""
-    @UIProperty
+    @ui_property(True)
     def visible(self, val):
         """gets/sets the widget's visibility (True or False)"""
         if val:
@@ -59,14 +64,39 @@ class UIElement(object):
             self._gtkobj.hide()
             # TODO: set width, height = 0
 
+class Window(UIElement):
+    def __init__(self, child, **attrs):
+        self.child = child
+        UIElement.__init__(self, **attrs)
+    def _build(self):
+        wnd = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        #wnd.set_title(self.title)
+        wnd.connect("delete_event", lambda *args: False)
+        wnd.connect("destroy", self._handle_close)
+        wnd.add(self.child._gtkobj)
+        wnd.show()
+        return wnd
+    
+    def _handle_close(self, *args):
+        self.closed = 1
+        self.closed = 0
+        gtk.main_quit()
+    
+    @ui_property("Untitled")
+    def title(self, val):
+        self._gtkobj.set_title(val)
+    @ui_property(0)
+    def closed(self, val):
+        pass
+
 class Layout(UIElement):
     pass
 
 class HLayout(Layout):
-    def _build(self):
+    def _build(self, depsol):
         self._box = gtk.Layout()
         for e in self.elems:
-            wgt = e.build()
+            wgt = e.build(depsol)
             self._box.add(wgt)
         self._box.show()
         scr = gtk.ScrolledWindow()
@@ -74,7 +104,7 @@ class HLayout(Layout):
         scr.add(self._box)
         scr.show()
         return scr
-    
+
 #    def render(self, solution):
 #        self.build()
 #        for e in self.elems:
@@ -101,7 +131,7 @@ class Label(UIElement):
         lbl.show()
         return lbl
     
-    @UIProperty
+    @ui_property("")
     def text(self, val):
         self._gtkobj.set_text(val)
 
@@ -115,17 +145,18 @@ class Button(UIElement):
         self.clicked = 1
         self.clicked = 0
     
-    @UIProperty
+    @ui_property("")
     def text(self, text):
         self._gtkobj.set_text(text)
-    @UIProperty
+    @ui_property(0)
     def clicked(self, val):
         pass
 
 
 
 if __name__ == "__main__":
-    pass
+    w = Window(Label(text = "hello"), title="foo")
+    gtk.main()
 
 
 

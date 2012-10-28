@@ -157,11 +157,12 @@ class LinEq(object):
         return "%r = %r" % (self.lhs, self.rhs)
 
 class LinVar(LinearMixin):
-    __slots__ = ["name", "owner", "type"]
-    def __init__(self, name, owner = None, type = None):
+    __slots__ = ["name", "owner", "type", "default"]
+    def __init__(self, name, owner = None, type = None, default = None):
         self.name = name
         self.owner = owner
         self.type = type
+        self.default = default
     def __repr__(self):
         return self.name
     def __eq__(self, other):
@@ -173,6 +174,8 @@ class LinVar(LinearMixin):
         return not (self.name == other.name)
     def __hash__(self):
         return hash(self.name)
+    def __getitem__(self, default):
+        self.default = default
 
 class NonLinVar(object):
     def __init__(self, name):

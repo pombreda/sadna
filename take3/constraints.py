@@ -7,8 +7,8 @@ class LinearConstraint(object):
     def __init__(self, elems = (), **attrs):
         self.attrs = attrs
         self.id = self._counter.next()
-        self.w = LinVar("w%d" % (self.id,), self, "width")
-        self.h = LinVar("h%d" % (self.id,), self, "height")
+        self.w = LinVar("w%d" % (self.id,), self, "user")
+        self.h = LinVar("h%d" % (self.id,), self, "user")
         self.w.owner = self
         self.h.owner = self
         self.attrs["w_constraint"] = None
@@ -131,8 +131,14 @@ class DependencySolver(object):
     def __init__(self, root):
         self.root = root
         self.solution = self._unify()
+        for var in self._get_freevars():
+            if var.type in ("padding", "overflow"):
+                self.solution[var] = 0
         self.dependencies = self._calculate_dependencies()
         self.results = {}
+    
+    def __str__(self):
+        return "\n".join("%s = %s" % (k, v) for k, v in self.solution.items())
     
     def _unify(self):
         linsys = LinSys(list(self.root.get_constraints()))
@@ -173,7 +179,8 @@ class DependencySolver(object):
     
     def eval(self, freevars):
         for k in freevars.keys():
-            self.results.pop(k, None)
+            for k2 in self.dependencies[k]:
+                self.results.pop(k2, None)
         
         class RecEvalDict(object):
             def __getitem__(self, key):
@@ -189,7 +196,10 @@ class DependencySolver(object):
             self.results[key] = NotImplemented
             v = self.solution[key]
             if isinstance(v, FreeVar):
-                self.results[key] = freevars[key]
+                if key.default is not None:
+                    self.results[key] = freevars[key]
+                else:
+                    self.results[key] = freevars[key]
             elif hasattr(v, "eval"):
                 self.results[key] = v.eval(rec_eval_dict)
             else:
@@ -199,14 +209,18 @@ class DependencySolver(object):
         for k in self.solution:
             rec_eval(k)
         return self.results
+    
+    def is_free(self, var):
+        return isinstance(self.solution[var], FreeVar)
 
 
 if __name__ == "__main__":
     x = LinVar("x")
-    root = (Label(text = "foo").X(x,50) | Label(text = "bar").X(2 * x,50) | Label(text = "spam").X(50,60)).X(None, 100)
+    root = (Label(text = "foo").X(x,50) | Label(text = "bar").X(2 * x,50) | Label(text = "spam").X(50,60))
     depsol = DependencySolver(root)
-    print depsol.eval({"WindowWidth" : 300, "scroller2" : 150})
-    print depsol.eval({"WindowWidth" : 500})
+    print depsol
+    print depsol.eval({"WindowWidth" : 300, "WindowHeight" : 200})
+    print depsol.eval({"WindowHeight" : 400})
 
 
 
