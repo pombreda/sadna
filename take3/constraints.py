@@ -1,14 +1,17 @@
 import itertools
 from linear import LinVar, LinEq, LinSys, FreeVar, BinExpr
+import flow
 
 
 class LinearConstraint(object):
+    GUI_CLASS = None
+
     _counter = itertools.count()
     def __init__(self, elems = (), **attrs):
         self.attrs = attrs
         self.id = self._counter.next()
-        self.w = LinVar("w%d" % (self.id,), self, "user")
-        self.h = LinVar("h%d" % (self.id,), self, "user")
+        self.w = LinVar("_w%d" % (self.id,), self, "user")
+        self.h = LinVar("_h%d" % (self.id,), self, "user")
         self.w.owner = self
         self.h.owner = self
         self.attrs["w_constraint"] = None
@@ -47,6 +50,8 @@ class LinearConstraint(object):
         for e in self.elems:
             for cons in e.get_constraints():
                 yield cons
+    def render_gui(self, solver):
+        raise NotImplementedError()
 
 #===================================================================================================
 # Layout combinators
@@ -54,7 +59,7 @@ class LinearConstraint(object):
 class Layout(LinearConstraint):
     def __init__(self, elems, **attrs):
         LinearConstraint.__init__(self, elems, **attrs)
-        self.scroller = LinVar("scroller%d" % (self.id,), self, "overflow")
+        self.scroller = LinVar("_s%d" % (self.id,), self, "padding")
         self.padders = {}
     
     @classmethod
@@ -74,14 +79,19 @@ class Layout(LinearConstraint):
 
     def _get_padder(self, e):
         if e not in self.padders:
-            self.padders[e] = LinVar("padding%d" % (e.id,), e, "padding")
+            self.padders[e] = LinVar("_p%d" % (e.id,), e, "padding")
         return self.padders[e]
     
     @classmethod
     def foreach(cls, func, array):
         return cls([func(elem) for elem in array])
 
+    def render_gui(self, solver):
+        return self.GTK_CLASS(self, solver, [e.render_gui(solver) for e in self.elems])
+
 class HLayout(Layout):
+    GUI_CLASS = flow.HLayout
+    
     def get_constraints(self):
         for cons in Layout.get_constraints(self):
             yield cons
@@ -90,38 +100,43 @@ class HLayout(Layout):
             yield LinEq(e.h + self._get_padder(e), self.h)
 
 class VLayout(Layout):
+    GUI_CLASS = flow.VLayout
+    
     def get_constraints(self):
         for cons in Layout.get_constraints(self):
             yield cons
         yield LinEq(sum(e.h for e in self.elems) + self.scroller, self.h)
         for e in self.elems:
             yield LinEq(e.w + self._get_padder(e), self.w)
-
+    
 #===================================================================================================
 # Atoms
 #===================================================================================================
 class Atom(LinearConstraint):
+    GUI_CLASS = None
     def __init__(self, **attrs):
         LinearConstraint.__init__(self, **attrs)
+    def render_gui(self, solver):
+        return self.GTK_CLASS(self, solver)
 
 class Label(Atom):
-    pass
+    GUI_CLASS = flow.Label
 class Button(Atom):
-    pass
-class TextBox(Atom):
-    pass
-class Image(Atom):
-    pass
-class CheckBox(Atom):
-    pass
-class RadioBox(Atom):
-    pass
-class ComboBox(Atom):
-    pass
-class ListBox(Atom):
-    pass
-class Slider(Atom):
-    pass
+    GUI_CLASS = flow.Button
+#class TextBox(Atom):
+#    GUI_CLASS = flow.TextBox
+#class Image(Atom):
+#    GUI_CLASS = flow.Image
+#class CheckBox(Atom):
+#    GUI_CLASS = flow.CheckBox
+#class RadioBox(Atom):
+#    GUI_CLASS = flow.RadioBox
+#class ComboBox(Atom):
+#    GUI_CLASS = flow.ComboBox
+#class ListBox(Atom):
+#    GUI_CLASS = flow.ListBox
+#class Slider(Atom):
+#    GUI_CLASS = flow.Slider
 
 
 #===================================================================================================
@@ -132,7 +147,7 @@ class DependencySolver(object):
         self.root = root
         self.solution = self._unify()
         for var in self._get_freevars():
-            if var.type in ("padding", "overflow"):
+            if var.type == "padding":
                 self.solution[var] = 0
         self.dependencies = self._calculate_dependencies()
         self.results = {}
@@ -214,13 +229,23 @@ class DependencySolver(object):
         return isinstance(self.solution[var], FreeVar)
 
 
+def render(root):
+    solver = DependencySolver(root)
+    top = root.render_gui(solver)
+    return flow.Window(root, top)
+
+
 if __name__ == "__main__":
-    x = LinVar("x")
-    root = (Label(text = "foo").X(x,50) | Label(text = "bar").X(2 * x,50) | Label(text = "spam").X(50,60))
-    depsol = DependencySolver(root)
-    print depsol
-    print depsol.eval({"WindowWidth" : 300, "WindowHeight" : 200})
-    print depsol.eval({"WindowHeight" : 400})
+    #x = LinVar("x")
+    #root = (Label(text = "foo").X(x,50) | Label(text = "bar").X(2 * x,50) | Label(text = "spam").X(50,60))
+    #depsol = DependencySolver(root)
+    #print depsol
+    #print depsol.eval({"WindowWidth" : 300, "WindowHeight" : 200})
+    #print depsol.eval({"WindowHeight" : 400})
+    root = (Label(text = "foo").X(50,20) | Label(text = "bar").X(50,20)).X(100,20)
+    print render(root)
+
+
 
 
 

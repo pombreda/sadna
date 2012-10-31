@@ -24,15 +24,18 @@ def ui_property(default = None):
 
 
 class UIElement(object):
-    def __init__(self, **attrs):
-        self._attrs = {v.name : v.default for cls in reversed(type(self).mro()) 
-            for k, v in cls.__dict__.items() if isinstance(v, UIProperty)}
-        self._observers = {}
+    def __init__(self, constraint, solver, children):
+        self._constraint = constraint
+        self._solver = solver
+        self._children = children
+        #self._attrs = {v.name : v.default for cls in reversed(type(self).mro()) 
+        #    for k, v in cls.__dict__.items() if isinstance(v, UIProperty)}
+        #self._observers = {}
         self._gtkobj = self._build()
-        for k, v in attrs.items():
-            if k not in self._attrs:
-                raise ValueError("Unknown attribute %r" % (k,))
-            setattr(self, k, v)
+        #for k, v in attrs.items():
+        #    if k not in self._attrs:
+        #        raise ValueError("Unknown attribute %r" % (k,))
+        #    setattr(self, k, v)
         self._gtkobj.connect("size-allocate", self._handle_configure)
     
     def _build(self):
@@ -65,15 +68,13 @@ class UIElement(object):
             # TODO: set width, height = 0
 
 class Window(UIElement):
-    def __init__(self, child, **attrs):
-        self.child = child
-        UIElement.__init__(self, **attrs)
+    def __init__(self, constraint, solver, child):
+        UIElement.__init__(self, constraint, solver, [child])
     def _build(self):
         wnd = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        #wnd.set_title(self.title)
         wnd.connect("delete_event", lambda *args: False)
         wnd.connect("destroy", self._handle_close)
-        wnd.add(self.child._gtkobj)
+        wnd.add(self.children[0]._gtkobj)
         wnd.show()
         return wnd
     
@@ -90,14 +91,24 @@ class Window(UIElement):
         pass
 
 class Layout(UIElement):
-    pass
+    GTK_PANE = None
+    DIR = None
+    
+    def __init__(self, elems, **attrs):
+        UIElement.__init__(self, **attrs)
+        self.elems = elems
+
 
 class HLayout(Layout):
-    def _build(self, depsol):
+    PANE = gtk.HPaned
+    
+    def _build(self):
         self._box = gtk.Layout()
         for e in self.elems:
-            wgt = e.build(depsol)
-            self._box.add(wgt)
+            if self._solver.is_free(e._constraint.w):
+                pass
+            else:
+                self._box.add(e._gtkobj)
         self._box.show()
         scr = gtk.ScrolledWindow()
         scr.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
@@ -124,6 +135,9 @@ class HLayout(Layout):
 #            self._box.move(wgt, x_offset, hp / 2)
 #            x_offset += w
 #        self._box.set_size(x_offset, 60)
+
+class VLayout(Layout):
+    PANE = gtk.VPaned
 
 class Label(UIElement):
     def _build(self):
@@ -155,9 +169,7 @@ class Button(UIElement):
 
 
 if __name__ == "__main__":
-    w = Window(Label(text = "hello"), title="foo")
-    gtk.main()
-
+    pass
 
 
 
