@@ -28,9 +28,9 @@ class UIElement(object):
         self._constraint = constraint
         self._solver = solver
         self._children = children
-        #self._attrs = {v.name : v.default for cls in reversed(type(self).mro()) 
-        #    for k, v in cls.__dict__.items() if isinstance(v, UIProperty)}
-        #self._observers = {}
+        self._attrs = {v.name : v.default for cls in reversed(type(self).mro()) 
+            for k, v in cls.__dict__.items() if isinstance(v, UIProperty)}
+        self._observers = {}
         self._gtkobj = self._build()
         #for k, v in attrs.items():
         #    if k not in self._attrs:
@@ -74,7 +74,7 @@ class Window(UIElement):
         wnd = gtk.Window(gtk.WINDOW_TOPLEVEL)
         wnd.connect("delete_event", lambda *args: False)
         wnd.connect("destroy", self._handle_close)
-        wnd.add(self.children[0]._gtkobj)
+        wnd.add(self._children[0]._gtkobj)
         wnd.show()
         return wnd
     
@@ -82,6 +82,15 @@ class Window(UIElement):
         self.closed = 1
         self.closed = 0
         gtk.main_quit()
+
+    @ui_property()
+    def width(self, val):
+        """gets/sets the widget's width"""
+        self._solver["WindowWidth"] = val
+    @ui_property()
+    def height(self, val):
+        """gets/sets the widget's height"""
+        self._solver["WindowHeight"] = val
     
     @ui_property("Untitled")
     def title(self, val):
@@ -93,18 +102,13 @@ class Window(UIElement):
 class Layout(UIElement):
     GTK_PANE = None
     DIR = None
-    
-    def __init__(self, elems, **attrs):
-        UIElement.__init__(self, **attrs)
-        self.elems = elems
-
 
 class HLayout(Layout):
     PANE = gtk.HPaned
     
     def _build(self):
         self._box = gtk.Layout()
-        for e in self.elems:
+        for e in self._children:
             if self._solver.is_free(e._constraint.w):
                 pass
             else:
@@ -139,7 +143,11 @@ class HLayout(Layout):
 class VLayout(Layout):
     PANE = gtk.VPaned
 
-class Label(UIElement):
+class Atom(UIElement):
+    def __init__(self, constraint, solver):
+        UIElement.__init__(self, constraint, solver, ())
+
+class Label(Atom):
     def _build(self):
         lbl = gtk.Label()
         lbl.show()
@@ -149,7 +157,7 @@ class Label(UIElement):
     def text(self, val):
         self._gtkobj.set_text(val)
 
-class Button(UIElement):
+class Button(Atom):
     def _build(self):
         btn = gtk.Button(self.text)
         btn.connect("clicked", self._handle_click)
