@@ -235,8 +235,25 @@ class LinSys(object):
     def __str__(self):
         return "\n".join(repr(eq) for eq in self.equations)
     
-    def to_matrix(self):
-        vars_indexes = {}
+    def get_vars(self):
+        vars = set()
+        for eq in self.equations:
+            if isinstance(eq.lhs, LinSum):
+                vars.update(e.var for e in eq.lhs if isinstance(e, Coeff))
+            elif isinstance(eq.lhs, Coeff):
+                vars.append(eq.lhs.var)
+            elif isinstance(eq.lhs, LinVar):
+                vars.append(eq.lhs)
+            
+            if isinstance(eq.rhs, LinSum):
+                vars.update(e.var for e in eq.rhs if isinstance(e, Coeff))
+            elif isinstance(eq.rhs, Coeff):
+                vars.add(eq.rhs.var)
+            elif isinstance(eq.rhs, LinVar):
+                vars.add(eq.rhs)
+        return vars
+    
+    def to_matrix(self, vars_indexes):
         equations = []
         for eq in self.equations:
             vars = []
@@ -269,8 +286,8 @@ class LinSys(object):
             scalars = sum(scalars)
             varbins = {}
             for v in vars:
-                if v.var not in vars_indexes:
-                    vars_indexes[v.var] = len(vars_indexes)
+                #if v.var not in vars_indexes:
+                #    vars_indexes[v.var] = len(vars_indexes)
                 if v.var not in varbins:
                     varbins[v.var] = v.coeff
                 else:
@@ -285,8 +302,19 @@ class LinSys(object):
         
         return matrix, sorted(vars_indexes.keys(), key = lambda v: vars_indexes[v])
     
-    def solve(self):
-        matrix, vars = self.to_matrix()
+    def solve(self, freevars):
+        vars_indexes = {}
+        all_vars = self.get_vars()
+        counter = itertools.count()
+        for v in all_vars:
+            if v not in freevars:
+                vars_indexes[v] = counter.next()
+        for fv in freevars:
+            if fv not in all_vars:
+                raise ValueError("%r is not a known variable in this system" % (fv,))
+            vars_indexes[fv] = counter.next()
+        
+        matrix, vars = self.to_matrix(vars_indexes)
         return solve_matrix(matrix, vars)
 
 
@@ -328,15 +356,16 @@ if __name__ == "__main__":
 
     ls = LinSys([
         LinEq(50 + p0, h2),
-        LinEq(o1, 0 + x),
         LinEq(w2, 0 + x + x),
         LinEq(o0, 0),
         LinEq(50 + p1, h2),
-        LinEq(h2, WH),
-        LinEq(w2, WW),
+        LinEq(o1, 0 + x),
+        #LinEq(h2, WH),
+        #LinEq(w2, WW),
     ])
+    print ls.get_vars()
     print ls
-    print ls.solve()
+    print ls.solve([x])
 
 #    x = LinVar("x")
 #    y = LinVar("y")

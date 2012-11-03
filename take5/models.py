@@ -1,4 +1,5 @@
 import itertools
+from functools import partial 
 from linear_system import LinVar, LinEq, LinSys, FreeVar, BinExpr
 import pygtk
 pygtk.require('2.0')
@@ -12,7 +13,7 @@ class BaseModel(object):
     def __init__(self, children, **attrs):
         self.id = self._counter.next()
         self.children = children
-        self.attrs = {"width" : None, "height" : None}
+        self.attrs = {"width" : None, "height" : None, "visible" : True}
         self.attrs.update(self.ATTRS)
         self._observers = {}
         self._computed_attrs = {}
@@ -63,6 +64,29 @@ class BaseModel(object):
                 yield cons
 
     #
+    # GUI API
+    #
+    def build(self, solver):
+        if self._gtkobj:
+            return
+        self._build(solver)
+        self.when_changed("width", self._set_width)
+        self.when_changed("height", self._set_height)
+        self.when_changed("visible", self._set_visibility)
+    
+    def _set_width(self, neww):
+        _, h = self._gtkobj.get_size_request()
+        self._gtkobj.set_size_request(int(neww), h)
+    def _set_height(self, newh):
+        w, _ = self._gtkobj.get_size_request()
+        self._gtkobj.set_size_request(w, int(newh))
+    def _set_visibility(self, val):
+        if val:
+            self._gtkobj.show()
+        else:
+            self._gtkobj.hide()
+
+    #
     # Programmatic API
     #
     def set(self, attr, value):
@@ -81,15 +105,43 @@ class BaseModel(object):
             self._observers[attr] = []
         self._observers[attr].append(callback)
 
+
 class TopLevelModel(BaseModel):
     ATTRS = {"title" : "Untitled"}
     
     def __init__(self, child, **attrs):
         BaseModel.__init__(self, [child], **attrs)
+   
+    def _build(self, solver):
+        self._gtkobj = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        self._gtkobj.connect("delete_event", lambda *args: False)
+        self._gtkobj.connect("destroy", self._handle_close)
+        
+        def _handle_configure(_, event):
+            solver.update({"WindowHeight" : event.height, "WindowWidth" : event.width})
+        self._gtkobj.connect("size-allocate", _handle_configure)
+
+        if not solver.is_free("WindowHeight") and not solver.is_free("WindowWidth"):
+            self._gtkobj.set_resizable(False)
+        self.when_changed("title", self._set_title)
+        self.children[0].build(solver)
+        self._gtkobj.add(self.children[0]._gtkobj)
+        self._gtkobj.set_size_request(300,200)
+
+    def _handle_close(self, *args):
+        self.set("closed", 1)
+        self.set("closed", 0)
+        gtk.main_quit()
+    
+    def _set_title(self, _, title):
+        self._gtkobj.set_title(title)
     
     def render(self):
-        linsys = LinSys(list(self.get_constraints()))
-        linsys.solve()
+        solver = ModelSolver(self)
+        if not self._gtkobj:
+            self.build(solver)
+
+
 
 #===================================================================================================
 # Layout
@@ -127,9 +179,23 @@ class HLayoutModel(BaseLayoutModel):
             yield LinEq(child.attrs["height"] + self._get_padder(child), self.attrs["height"])
             yield LinEq(self._get_offset(child), sum(child.attrs["width"] for child in self.children[:i]))
     
-    #def build(self, solver):
-    #    for child in self.children:
-    #        if child.attrs["width"]
+    def _build(self, solver):
+        self._gtkobj = gtk.ScrolledWindow()
+        self._gtkobj.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+        self._box = gtk.Layout()
+        self._gtkobj.add(self._box)
+
+        for child in self.children:
+            child.build(solver)
+            
+            if solver.is_free(child.width):
+                pass
+            else:
+                self._box.add(child._gtkobj)
+            #self.when_changed(self._get_offset(child), partial(self.set_child_offset, child))
+    
+    def set_child_offset(self, child, newoff):
+        self._box.move(child._gtkobj, newoff, 0)
 
 class VLayoutModel(BaseLayoutModel):
     pass
@@ -144,10 +210,9 @@ class AtomModel(BaseModel):
 class Label(AtomModel):
     ATTRS = {"text" : ""}
     
-    def build(self, solver):
-        lbl = gtk.Label(repr(self))
+    def _build(self, solver):
+        self._gtkobj = gtk.Label(repr(self))
         self.when_changed("text", self.set_text)
-        return lbl
     
     def set_text(self, text):
         self._gtkobj.set_text(text)
@@ -155,11 +220,10 @@ class Label(AtomModel):
 class Button(AtomModel):
     ATTRS = {"text" : "", "clicked" : 0}
     
-    def build(self, solver):
-        btn = gtk.Button(repr(self))
+    def _build(self, solver):
+        self._gtkobj = gtk.Button(repr(self))
+        self._gtkobj.connect("clicked", self._handle_click)
         self.when_changed("text", self.set_text)
-        btn.connect("clicked", self._handle_click)
-        return btn
     
     def _handle_click(self, *_):
         self.set("clicked", 1)
@@ -183,9 +247,9 @@ class ModelSolver(object):
     def __init__(self, root):
         self.root = root
         self.solution = self._unify()
-        for var in self._get_freevars():
+        for var in self.get_freevars():
             if var.type == "padding":
-                self.solution[var] = 0
+                self.solution[var] = 0.0
         self.dependencies = self._calculate_dependencies()
         self.results = {}
     
@@ -200,9 +264,11 @@ class ModelSolver(object):
         linsys = LinSys(list(self.root.get_constraints()))
         linsys.append(LinEq(self.root.attrs["width"], LinVar("WindowWidth", None, "input")))
         linsys.append(LinEq(self.root.attrs["height"], LinVar("WindowHeight", None, "input")))
-        return linsys.solve()
+        all_vars = linsys.get_vars()
+        freevars = ([v for v in all_vars if v.type == "padding"] + [v for v in all_vars if v.type == "input"])
+        return linsys.solve(freevars)
 
-    def _get_freevars(self):
+    def get_freevars(self):
         for k, v in self.solution.items():
             if isinstance(v, FreeVar):
                 yield k
@@ -226,7 +292,7 @@ class ModelSolver(object):
     
     def _calculate_dependencies(self):
         dependencies = {}
-        for var in self._get_freevars():
+        for var in self.get_freevars():
             dependencies[var] = {var}
             self._transitive_closure(dependencies[var])
         return dependencies
@@ -280,9 +346,10 @@ class ModelSolver(object):
 
 if __name__ == "__main__":
     x = LinVar("x")
-    root = Label(text = "hello").X(x, 50) | Label(text = "world").X(x, 50)
-    solver = ModelSolver(root)
-    print solver
+    root = TopLevelModel((Label(text = "hello").X(x, 50) | Label(text = "world").X(x, 50)).X(200,60))
+    root.render()
+    root._gtkobj.show_all()
+    gtk.main()
     
     #print root
     #ls = LinSys(list(root.get_constraints()))
