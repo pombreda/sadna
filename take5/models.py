@@ -120,7 +120,7 @@ class TopLevelModel(BaseModel):
         
         def _handle_configure(_, event):
             solver.update({"WindowHeight" : event.height, "WindowWidth" : event.width})
-        self._gtkobj.connect("size-allocate", _handle_configure)
+        #self._gtkobj.connect("size-allocate", _handle_configure)
 
         if not solver.is_free("WindowHeight") and not solver.is_free("WindowWidth"):
             self._gtkobj.set_resizable(False)
@@ -190,20 +190,19 @@ class HLayoutModel(BaseLayoutModel):
             child.build(solver)
             if solver.is_free(child.width):
                 split_indexes.append(i)
+        
         if not split_indexes:
             for child in self.children:
                 self._box.add(child._gtkobj)
         else:
-            last = 0
-            for i in split_indexes:
-                box2 = gtk.Layout()
-                for child in self.children[last:i]:
-                    box2.add(child._gtkobj)
-                pane = gtk.HPaned()
-                pane.add1(box2)
-                pane.add2(self.children[i]._gtkobj)
-                self._box.add(pane)
-                last = i+1
+            pane = gtk.HPaned()
+            pane.pack1(self.children[0]._gtkobj, resize=False)
+            pane.pack2(self.children[1]._gtkobj, resize=False)
+            def _handle_split(*args):
+                print args
+            
+            pane.connect("accept-position", _handle_split)
+            self._box.add(pane)
         
         #self.when_changed(self._get_offset(child), partial(self.set_child_offset, child))
         #self._box.move(child._gtkobj, newoff, 0)
