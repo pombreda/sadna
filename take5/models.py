@@ -94,6 +94,7 @@ class BaseModel(object):
             raise KeyError("Unknown attr %r" % (attr,))
         old = self._computed_attrs.get(attr, None)
         if old != value:
+            print "SET %r = %r (%r)" % (attr, value, old)
             self._computed_attrs[attr] = value
             for callback in self._observers.get(attr, ()):
                 callback(value)
@@ -107,7 +108,7 @@ class BaseModel(object):
 
 
 class TopLevelModel(BaseModel):
-    ATTRS = {"title" : "Untitled"}
+    ATTRS = {"title" : "Untitled", "closed" : 0}
     
     def __init__(self, child, **attrs):
         BaseModel.__init__(self, [child], **attrs)
@@ -174,28 +175,38 @@ class HLayoutModel(BaseLayoutModel):
     def get_constraints(self):
         for cons in BaseLayoutModel.get_constraints(self):
             yield cons
-        yield LinEq(self.attrs["width"], sum(child.attrs["width"] for child in self.children) + self._scroller)
+        yield LinEq(self.width, sum(child.width for child in self.children) + self._scroller)
         for i, child in enumerate(self.children):
-            yield LinEq(child.attrs["height"] + self._get_padder(child), self.attrs["height"])
-            yield LinEq(self._get_offset(child), sum(child.attrs["width"] for child in self.children[:i]))
+            yield LinEq(child.height + self._get_padder(child), self.attrs["height"])
+            yield LinEq(self._get_offset(child), sum(child.width for child in self.children[:i]))
     
     def _build(self, solver):
         self._gtkobj = gtk.ScrolledWindow()
         self._gtkobj.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
         self._box = gtk.Layout()
         self._gtkobj.add(self._box)
-
-        for child in self.children:
+        split_indexes = []
+        for i, child in enumerate(self.children):
             child.build(solver)
-            
             if solver.is_free(child.width):
-                pass
-            else:
+                split_indexes.append(i)
+        if not split_indexes:
+            for child in self.children:
                 self._box.add(child._gtkobj)
-            #self.when_changed(self._get_offset(child), partial(self.set_child_offset, child))
-    
-    def set_child_offset(self, child, newoff):
-        self._box.move(child._gtkobj, newoff, 0)
+        else:
+            last = 0
+            for i in split_indexes:
+                box2 = gtk.Layout()
+                for child in self.children[last:i]:
+                    box2.add(child._gtkobj)
+                pane = gtk.HPaned()
+                pane.add1(box2)
+                pane.add2(self.children[i]._gtkobj)
+                self._box.add(pane)
+                last = i+1
+        
+        #self.when_changed(self._get_offset(child), partial(self.set_child_offset, child))
+        #self._box.move(child._gtkobj, newoff, 0)
 
 class VLayoutModel(BaseLayoutModel):
     pass
@@ -310,7 +321,7 @@ class ModelSolver(object):
         def rec_eval(key):
             if key in self.results:
                 if self.results[key] is NotImplemented:
-                    raise ValueError("cyclic dependency found")
+                    raise ValueError("cyclic dependency found, var = %r" % (key,))
                 return self.results[key]
             # set up sentinel to detect cycles
             self.results[key] = NotImplemented
@@ -345,8 +356,8 @@ class ModelSolver(object):
 
 
 if __name__ == "__main__":
-    x = LinVar("x")
-    root = TopLevelModel((Label(text = "hello").X(x, 50) | Label(text = "world").X(x, 50)).X(200,60))
+    #x = LinVar("x")
+    root = TopLevelModel((Label(text = "hello").X(None, 50) | Label(text = "world").X(None, 50)).X(200,60))
     root.render()
     root._gtkobj.show_all()
     gtk.main()
