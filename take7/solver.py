@@ -1,4 +1,4 @@
-from linsys import LinVar, LinEq, LinSys, FreeVar, BinExpr
+from linsys import LinVar, LinEq, LinSys, FreeVar, BinExpr, NoSolutionsExist
 
 
 class RecEvalDict(object):
@@ -12,13 +12,12 @@ class ModelSolver(object):
     def __init__(self, root):
         self.root = root
         self.linsys = LinSys(list(self.root.get_constraints()))
-        self.solution = self._unify()
-        # if there's no need for padding - ignore it
-        for var in self.get_freevars():
-            if var.type == "padding":
-                self.solution[var] = 0.0
+        self._unify()
+        self._solve_and_eliminate_padding()
+        
         self.dependencies = self._calculate_dependencies()
         self.results = {}
+        self.observed = {}
     
     def __str__(self):
         return "\n".join("%s = %s" % (k, v) for k, v in self.solution.items()
@@ -34,8 +33,35 @@ class ModelSolver(object):
         wh = LinVar("WindowHeight", None, "input", default = getattr(rh, "default", None))
         self.linsys.append(LinEq(self.root.attrs["width"], ww))
         self.linsys.append(LinEq(self.root.attrs["height"], wh))
-        freeness_order = [None, "user", "padding", "cons", "input"]
-        return self.linsys.solve(sorted(self.linsys.get_vars(), key = lambda v: freeness_order.index(v.type)))
+
+    def _resolve(self, eliminations = ()):
+        freeness_relation = [None, "user", "offset", "cons", "padding", "input"]
+        var_order = sorted(self.linsys.get_vars(), key = lambda v: freeness_relation.index(v.type))
+        self.solution = self.linsys.solve(var_order, eliminations)
+
+    def _solve_and_eliminate_padding(self):
+        self._resolve()
+        for var in self.get_freevars():
+            if var.type == "padding":
+                self.solution[var] = 0.0
+        
+        #fixed = set()
+        #unfixed = set()
+        #for var, val in self.solution.items():
+        #    if var.type == "padding":
+        #        if isinstance(val, (int, float)):
+        #            fixed.add(var)
+        #        else:
+        #            unfixed.add(var)
+        #
+        #unfixed -= fixed
+        #print "!! unfixed =", unfixed
+        #for var in list(unfixed):
+        #    try:
+        #        self._resolve({var})
+        #    except NoSolutionsExist:
+        #        unfixed.discard(var)
+        #self._resolve(unfixed)
 
     def get_freevars(self):
         for k, v in self.solution.items():
@@ -99,14 +125,26 @@ class ModelSolver(object):
         for k in self.solution:
             rec_eval(k)
         
-#        for k, oldv in changed.items():
-#            v = self.results[k]
-#            if oldv != v and k.owner:
-#                k.owner.set(k, v)
+        for k, oldv in changed.items():
+            v = self.results[k]
+            if oldv != v and k in self.observed:
+                for cb in self.observed[k]:
+                    cb(v)
         
         return self.results
     
     def is_free(self, var):
         return isinstance(self.solution[var], FreeVar)
+    
+    def watch(self, var, callback):
+        if var not in self.observed:
+            self.observed[var] = []
+        self.observed[var].append(callback)
+
+
+
+
+
+
 
 

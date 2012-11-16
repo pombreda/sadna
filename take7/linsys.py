@@ -302,7 +302,7 @@ class LinSys(object):
         
         return matrix, sorted(vars_indexes.keys(), key = lambda v: vars_indexes[v])
     
-    def solve(self, freevars):
+    def solve(self, freevars, eliminations = ()):
         vars_indexes = {}
         all_vars = self.get_vars()
         counter = itertools.count()
@@ -315,6 +315,9 @@ class LinSys(object):
             vars_indexes[fv] = counter.next()
         
         matrix, vars = self.to_matrix(vars_indexes)
+        for substvar in eliminations:
+            matrix[:,vars.index(substvar)] = 0.0
+        
         return solve_matrix(matrix, vars)
 
 

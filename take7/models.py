@@ -34,7 +34,7 @@ class LayoutModel(BaseModel):
     def _get_padder(self, child):
         return LinVar("_p%d" % (child.id,), self, "padding")
     def _get_offset(self, child):
-        return LinVar("_o%d" % (child.id,), self, "padding")
+        return LinVar("_o%d" % (child.id,), self, "offset")
     
     def get_constraints(self):
         for cons in BaseModel.get_constraints(self):
@@ -56,20 +56,20 @@ class Horizontal(LayoutModel):
             yield LinEq(child.height + self._get_padder(child), self.attrs["height"])
             yield LinEq(self._get_offset(child), sum(child.width for child in self.children[:i]))
 
-    def generate_dom(self, solver):
-        blocks = [[]]
-        has_free = False
-        for child in self.children:
-            if solver.is_free(child.width):
-                if has_free:
-                    blocks.append([])
-                    #has_free = False
-                has_free = True
-                blocks[-1].append((child, child.width))
-            else:
-                blocks[-1].append((child, None))
-        for b in blocks:
-            print b
+#    def generate_dom(self, solver):
+#        blocks = [[]]
+#        has_free = False
+#        for child in self.children:
+#            if solver.is_free(child.width):
+#                if has_free:
+#                    blocks.append([])
+#                    #has_free = False
+#                has_free = True
+#                blocks[-1].append((child, child.width))
+#            else:
+#                blocks[-1].append((child, None))
+#        for b in blocks:
+#            print b
 
 
 class Vertical(LayoutModel):
