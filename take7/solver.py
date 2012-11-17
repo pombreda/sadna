@@ -24,7 +24,12 @@ class ModelSolver(object):
             if not isinstance(v, FreeVar))
     
     def __getitem__(self, var):
-        return self.results[var]
+        if var in self.results:
+            return self.results[var]
+        return self.solution[var]
+
+    def __contains__(self, var):
+        return var in self.results or var in self.solution
 
     def _unify(self):
         rw = self.root.attrs["width"]
@@ -34,10 +39,10 @@ class ModelSolver(object):
         self.linsys.append(LinEq(self.root.attrs["width"], ww))
         self.linsys.append(LinEq(self.root.attrs["height"], wh))
 
-    def _resolve(self, eliminations = ()):
+    def _resolve(self):
         freeness_relation = [None, "user", "offset", "cons", "padding", "input"]
         var_order = sorted(self.linsys.get_vars(), key = lambda v: freeness_relation.index(v.type))
-        self.solution = self.linsys.solve(var_order, eliminations)
+        self.solution = self.linsys.solve(var_order)
 
     def _solve_and_eliminate_padding(self):
         self._resolve()
@@ -140,7 +145,14 @@ class ModelSolver(object):
         if var not in self.observed:
             self.observed[var] = []
         self.observed[var].append(callback)
-
+    
+    def invoke_observers(self):
+        for var, callbacks in self.observed.items():
+            if var not in self:
+                continue
+            val = self[var]
+            for cb in callbacks:
+                cb(val)
 
 
 

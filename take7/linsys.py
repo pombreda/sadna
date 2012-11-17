@@ -70,7 +70,7 @@ class ExprMixin(object):
         return BinExpr(mul, other, self)
     def __rsub__(self, other):
         if isinstance(other, scalar_types) and abs(other) <= EPSILON:
-            return self
+            return BinExpr(mul, -1, self)
         return BinExpr(sub, other, self)
 
 class BinExpr(ExprMixin):
@@ -120,7 +120,8 @@ def solve_matrix(mat, variables):
         for i, v in enumerate(vars):
             if v not in assignments:
                 assignments[v] = FreeVar(v)
-            assignments[assignee] -= (-nonzero[i] * assignments[v])
+            assignments[assignee] -= nonzero[i] * assignments[v]
+    
     return assignments
 
 #===================================================================================================
@@ -283,7 +284,6 @@ class LinSys(object):
             else:
                 raise ValueError(eq.rhs)
             
-            scalars = sum(scalars)
             varbins = {}
             for v in vars:
                 #if v.var not in vars_indexes:
@@ -292,7 +292,7 @@ class LinSys(object):
                     varbins[v.var] = v.coeff
                 else:
                     varbins[v.var] += v.coeff
-            equations.append((varbins.items(), scalars))
+            equations.append((varbins.items(), sum(scalars)))
         
         matrix = numpy.zeros((len(equations), len(vars_indexes) + 1), float)
         for i, (vars, scalar) in enumerate(equations):
@@ -302,7 +302,7 @@ class LinSys(object):
         
         return matrix, sorted(vars_indexes.keys(), key = lambda v: vars_indexes[v])
     
-    def solve(self, freevars, eliminations = ()):
+    def solve(self, freevars = ()):
         vars_indexes = {}
         all_vars = self.get_vars()
         counter = itertools.count()
@@ -315,9 +315,6 @@ class LinSys(object):
             vars_indexes[fv] = counter.next()
         
         matrix, vars = self.to_matrix(vars_indexes)
-        for substvar in eliminations:
-            matrix[:,vars.index(substvar)] = 0.0
-        
         return solve_matrix(matrix, vars)
 
 
@@ -346,29 +343,29 @@ if __name__ == "__main__":
 #        LinEq(a + b, 7),
 #    ])
 #    print ls2.solve()
-    w2 = LinVar("w2")
-    p0 = LinVar("p0")
-    p1 = LinVar("p1")
-    x = LinVar("x")
-    o0 = LinVar("o0")
-    h2 = LinVar("h2")
-    o1 = LinVar("o1")
-    w2 = LinVar("w2")
-    WW = LinVar("WW")
-    WH = LinVar("WH")
-
-    ls = LinSys([
-        LinEq(50 + p0, h2),
-        LinEq(w2, 0 + x + x),
-        LinEq(o0, 0),
-        LinEq(50 + p1, h2),
-        LinEq(o1, 0 + x),
-        #LinEq(h2, WH),
-        #LinEq(w2, WW),
-    ])
-    print ls.get_vars()
-    print ls
-    print ls.solve([x])
+#    w2 = LinVar("w2")
+#    p0 = LinVar("p0")
+#    p1 = LinVar("p1")
+#    x = LinVar("x")
+#    o0 = LinVar("o0")
+#    h2 = LinVar("h2")
+#    o1 = LinVar("o1")
+#    w2 = LinVar("w2")
+#    WW = LinVar("WW")
+#    WH = LinVar("WH")
+#
+#    ls = LinSys([
+#        LinEq(50 + p0, h2),
+#        LinEq(w2, 0 + x + x),
+#        LinEq(o0, 0),
+#        LinEq(50 + p1, h2),
+#        LinEq(o1, 0 + x),
+#        #LinEq(h2, WH),
+#        #LinEq(w2, WW),
+#    ])
+#    print ls.get_vars()
+#    print ls
+#    print ls.solve([x])
 
 #    x = LinVar("x")
 #    y = LinVar("y")
@@ -383,6 +380,17 @@ if __name__ == "__main__":
 #    ])
 #    print ls.solve()
 
-
+    y = LinVar("y")
+    x = LinVar("x")
+    z = LinVar("z")
+    W = LinVar("W")
+    
+    ls = LinSys([
+        #LinEq(_w0, x),
+        LinEq(y, x + z),
+        LinEq(2 * y, W),
+    ])
+    
+    print ls.solve([x, y, z, W])
 
 
