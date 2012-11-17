@@ -21,18 +21,20 @@ class Control(object):
         raise NotImplementedError()
     
     def set_width(self, newwidth):
-        #print "!! set_width", int(newwidth)
-        self.widget.resize(int(newwidth), self.widget.height())
+        self.widget.setFixedWidth(int(newwidth))
     def set_height(self, newheight):
-        #print "!! set_height", int(newheight)
-        self.widget.resize(self.widget.width(), int(newheight))
+        self.widget.setFixedHeight(int(newheight))
 
 
 class Label(Control):
     def _build(self, parent):
         lbl = QtGui.QLabel(self.model.attrs["text"], parent)
+        lbl.setStyleSheet("* { background-color: yellow }")
         self.model.when_changed("text", lambda val: lbl.setText(val))
         return lbl
+
+    def set_height(self, newheight):
+        Control.set_height(self, newheight)
 
 
 def get_control_for_model(model):
@@ -56,7 +58,7 @@ class Window(CompositeControl):
         wnd.closeEvent = self._handle_closed
         self.widget = wnd
         self.children[0].build(wnd)
-        self.children[0].widget.move(0, 0)
+        #self.children[0].widget.move(0, 0)
         #wnd.setCentralWidget(self.children[0].widget)
         self._super_resizeEvent = wnd.resizeEvent
         wnd.resizeEvent = self._handle_resized
@@ -69,7 +71,7 @@ class Window(CompositeControl):
 
     def _handle_resized(self, event):
         self._super_resizeEvent(event)
-        self.children[0].widget.move(0,0)
+        self.children[0].widget.move(0, 0)
         freevars = {}
         if self.solver.is_free("WindowWidth"):
             freevars["WindowWidth"] = event.size().width()
@@ -80,6 +82,12 @@ class Window(CompositeControl):
     def _handle_closed(self, event):
         self.model.flash("closed")
         event.accept()
+
+    def set_width(self, newwidth):
+        self.widget.resize(int(newwidth), self.widget.height())
+    def set_height(self, newheight):
+        self.widget.resize(self.widget.width(), int(newheight))
+
 
 class HLayout(CompositeControl):
     def __init__(self, model, solver):
@@ -92,11 +100,10 @@ class HLayout(CompositeControl):
         #scrollarea.setWidget(hor)
         for child in self.children:
             child.build(hor)
-            coff = self.model._get_offset(child.model)
+            off = self.model._get_offset(child.model)
             def set_offset(val, child = child):
-                print "!! set_offset", int(val)
                 child.widget.move(int(val), 0)
-            self.solver.watch(coff, set_offset)
+            self.solver.watch(off, set_offset)
         return hor #scrollarea
 
 _model_to_control = {
@@ -112,8 +119,8 @@ def run(model):
     w = Window(model, sol)
     w.build(None)
     w.widget.show()
-    #sol.invoke_observers()
-    #model.invoke_observers()
+    sol.invoke_observers()
+    model.invoke_observers()
     return app.exec_()
 
 
@@ -124,7 +131,7 @@ if __name__ == "__main__":
     m = models.WindowModel(
         models.Horizontal([
             models.LabelAtom("label", text="foo", width = x),
-            models.LabelAtom("label", text="bar", width = x),
+            models.LabelAtom("label", text="bar", width = x, height = 100),
             models.LabelAtom("label", text="spam", width = x),
         ]),
         #width = 300, height = 200
