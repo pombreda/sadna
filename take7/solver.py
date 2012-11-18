@@ -1,4 +1,4 @@
-from linsys import LinVar, LinEq, LinSys, FreeVar, BinExpr, NoSolutionsExist
+from linsys import LinVar, LinSys, FreeVar, BinExpr
 
 
 class RecEvalDict(object):
@@ -12,11 +12,9 @@ class ModelSolver(object):
     def __init__(self, root):
         self.root = root
         self.linsys = LinSys(list(self.root.get_constraints()))
-        self._unify()
         self._solve_and_eliminate_padding()
-        
         self.dependencies = self._calculate_dependencies()
-        self.results = {}
+        self.results = {} #v : v.default for v in self.get_freevars() if v.default is not None}
         self.observed = {}
     
     def __str__(self):
@@ -31,16 +29,8 @@ class ModelSolver(object):
     def __contains__(self, var):
         return var in self.results or var in self.solution
 
-    def _unify(self):
-        rw = self.root.attrs["width"]
-        rh = self.root.attrs["height"]
-        ww = LinVar("WindowWidth", None, "input", default = getattr(rw, "default", None))
-        wh = LinVar("WindowHeight", None, "input", default = getattr(rh, "default", None))
-        self.linsys.append(LinEq(self.root.attrs["width"], ww))
-        self.linsys.append(LinEq(self.root.attrs["height"], wh))
-
     def _resolve(self):
-        freeness_relation = [None, "user", "offset", "cons", "padding", "input"]
+        freeness_relation = [None, "user", "offset", "cons", "padding", "default", "input"]
         var_order = sorted(self.linsys.get_vars(), key = lambda v: freeness_relation.index(v.type))
         self.solution = self.linsys.solve(var_order)
 

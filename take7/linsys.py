@@ -11,6 +11,9 @@ def eliminate(mat):
     """Original code by Jarno Elonen, Public Domain
     http://elonen.iki.fi/code/misc-notes/python-gaussj/index.html"""
     m, n = mat.shape
+    if m > n:
+        raise ValueError("more rows than columns")
+    
     for y in range(0, m):
         maxrow = y
         # Find max pivot
@@ -18,10 +21,7 @@ def eliminate(mat):
             if abs(mat[y2][y]) > abs(mat[maxrow][y]):
                 maxrow = y2
         mat[[y, maxrow],:] = mat[[maxrow, y],:]
-        if y >= n:
-            # more rows than columns!
-            raise ValueError("more rows than columns")
-            #continue
+        assert y < n
         if abs(mat[y][y]) <= EPSILON:
             # Singular
             continue
@@ -101,6 +101,13 @@ def solve_matrix(mat, variables):
     m, n = mat.shape
     if len(variables) != n - 1:
         raise ValueError("Expected %d variables" % (n - 1,))
+
+    if m >= n:
+        # add fake columns at the front
+        mat = numpy.hstack((numpy.zeros((m, m-n)), mat))
+        variables[0:0] = ["_fake%d" % (i,) for i in range(m-n)]
+        m, n = mat.shape
+
     eliminate(mat)
     assignments = {}
     
