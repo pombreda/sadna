@@ -9,8 +9,15 @@ _control_to_model = {}
 
 def control_for(model):
     def deco(cls):
+        assert model not in _control_to_model
         _control_to_model[model] = cls
         return cls
+    return deco
+
+def propagated_attr(name):
+    def deco(func):
+        func._propagated_attr = name
+        return func
     return deco
 
 def get_control_for_model(model):
@@ -31,7 +38,18 @@ class Control(object):
     def build(self, parent):
         if self.widget is None:
             self.widget = self._build(parent)
+            self._install_propagated_attrs()
         return self.widget
+    
+    def _install_propagated_attrs(self):
+        watched = {}
+        for cls in reversed(type(self).mro()):
+            for k, v in cls.__dict__.items():
+                if hasattr(v, "_propagated_attr"):
+                    watched[k] = (v._propagated_attr, getattr(self, k))
+        for attrname, cb in watched.values():
+            if attrname in self.model.computed_attrs:
+                self.model.when_changed(attrname, cb)
     
     def _build(self, parent):
         raise NotImplementedError()
@@ -66,12 +84,21 @@ class Window(CompositeControl):
         self.children[0].build(wnd)
         self._super_resizeEvent = wnd.resizeEvent
         wnd.resizeEvent = self._handle_resized
-        self.model.when_changed("title", lambda val: wnd.setWindowTitle(val))
         if not self.solver.is_free("WindowWidth"):
             wnd.setFixedWidth(self.solver["WindowWidth"])
         if not self.solver.is_free("WindowHeight"):
             wnd.setFixedHeight(self.solver["WindowHeight"])
         return wnd
+
+    @propagated_attr("title")
+    def set_title(self, val):
+        self.widget.setWindowTitle(val)
+
+    @propagated_attr("icon")
+    def set_icon(self, filename):
+        if not filename:
+            return
+        self.widget.setWindowIcon(QtGui.QIcon(filename))
 
     def _handle_resized(self, event):
         self._super_resizeEvent(event)
@@ -170,42 +197,104 @@ class VLayout(CompositeControl):
 #===================================================================================================
 # Atoms
 #===================================================================================================
-class LabeledControl(Control):
-    def _post_init(self):
-        self.model.when_changed("text", self.set_text)
-        self.model.when_changed("halign", self.set_halign)
-        self.model.when_changed("valign", self.set_valign)
-
+class CommonAttrsMixin(object):
+    @propagated_attr("text")
     def set_text(self, val):
         self.widget.setText(val)
 
     _haligns = {"left" : Qt.AlignLeft, "center" : Qt.AlignHCenter, "right" : Qt.AlignRight}    
+    @propagated_attr("halign")
     def set_halign(self, val):
         self.widget.setAlignment(self._haligns[val.lower()])
 
     _valigns = {"top" : Qt.AlignTop, "middle" : Qt.AlignVCenter, "bottom" : Qt.AlignBottom}    
+    @propagated_attr("valign")
     def set_valign(self, val):
         self.widget.setAlignment(self._valigns[val.lower()])
+    
+    @propagated_attr("font")
+    def set_font(self, val):      # (name, size, style)
+        assert type(val) is not tuple
+        if len(val) == 1:
+            self.widget.setStyleSheet("* { font-family: %s;}" % val)
+        elif len(val) == 2:
+            self.widget.setStyleSheet("* { font-family: %s; font-size: %s;}" % val)
+        elif len(val) == 3:
+            self.widget.setStyleSheet("* { font-family: %s; font-size: %s; font-style: %s; }" % val)
+        else:
+            raise ValueError("set_font: expected a tuple of 1 to 3 items")
+
+    @propagated_attr("fgcolor")
+    def set_fgcolor(self, val):   # 0xRRGGBB
+        if isinstance(val, str):
+            if val.startswith("0x"):
+                val = val[2:]
+        else:
+            val = "#%06x" % (val,)
+        self.widget.setStyleSheet("* { color: %s; }" % (val,))
+
+    @propagated_attr("bgcolor")
+    def set_bgcolor(self, val):   # 0xRRGGBB
+        if isinstance(val, str):
+            if val.startswith("0x"):
+                val = val[2:]
+        else:
+            val = "#%06x" % (val,)
+        self.widget.setStyleSheet("* { background-color: %s; }" % (val,))
+
+    @propagated_attr("enabled")
+    def set_enabled(self, val):
+        self.widget.setEnabled(val)
+
+    @propagated_attr("visible")
+    def set_visible(self, val):
+        self.widget.setVisible(val)
+
 
 @control_for(models.LabelAtom)
-class Label(LabeledControl):
+class Label(Control, CommonAttrsMixin):
     def _build(self, parent):
         lbl = QtGui.QLabel("", parent)
-        lbl.setStyleSheet("* { background-color: yellow }")
         return lbl
 
+    @propagated_attr("text")
+    def set_text(self, val):
+        self.widget.setText(val)
+        size = self.widget.sizeHint()
+        self.model.set("native_width", size.width())
+        self.model.set("native_height", size.height())
+
+
+@control_for(models.ImageAtom)
+class Image(Control):
+    def _build(self, parent):
+        lbl = QtGui.QLabel("", parent)
+        return lbl
+
+    @propagated_attr("enabled")
+    def set_enabled(self, val):
+        self.widget.setEnabled(val)
+
+    @propagated_attr("visible")
+    def set_visible(self, val):
+        self.widget.setVisible(val)
+
+    @propagated_attr("image")
+    def set_picture(self, filename):
+        pic = QtGui.QPixmap(filename)
+        self.widget.setPixmap(pic)
+        self.model.set("native_width", pic.width())
+        self.model.set("native_height", pic.height())
+
+
 @control_for(models.ButtonAtom)
-class Button(Control):
+class Button(Control, CommonAttrsMixin):
     def _build(self, parent):
         btn = QtGui.QPushButton("", parent)
         #btn.setStyleSheet("* { background-color: yellow }")
         btn.clicked.connect(self._handle_clicked)
-        self.model.when_changed("text", self.set_text)
         return btn
 
-    def set_text(self, val):
-        self.widget.setText(val)
-    
     def _handle_clicked(self, event):
         self.model.flash("clicked")
 
@@ -214,14 +303,21 @@ class Button(Control):
 class LineEdit(Control):
     def _build(self, parent):
         txt = QtGui.QLineEdit(parent)
-        self.model.when_changed("text", self.set_text)
-        self.model.when_changed("placeholder", self.set_placeholder)
         txt.textEdited.connect(self._handle_edit)
         txt.returnPressed.connect(self._handle_accept)
         return txt
     
+    @propagated_attr("text")
     def set_text(self, val):
         self.widget.setText(val)
+    
+    @propagated_attr("readonly")
+    def set_readonly(self, val):
+        self.widget.setReadOnly(val)
+
+    @propagated_attr("placeholder")
+    def set_placeholder(self, val):
+        self.widget.setPlaceholderText(val)
     
     def _handle_edit(self, val):
         self.model.set("text", val)
@@ -229,8 +325,6 @@ class LineEdit(Control):
     def _handle_accept(self):
         self.model.flash("accepted")
     
-    def set_placeholder(self, val):
-        self.widget.setPlaceholderText(val)
 
 
 def run(model):
@@ -255,6 +349,7 @@ if __name__ == "__main__":
     
     m = models.WindowModel(
         models.Horizontal([
+            models.LabelAtom(text = "foobar", width=x),
             models.LineEditAtom(placeholder="Type something...", width = 3*x, accepted = k),
             models.ButtonAtom(text = "Send", width = 60, clicked = k),
         ]),

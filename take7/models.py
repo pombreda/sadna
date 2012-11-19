@@ -164,7 +164,11 @@ class ContainerModel(BaseModel):
 
 
 class WindowModel(ContainerModel):
-    ATTRS = {"title" : InitValue("Untitled"), "closed" : InitValue(0)}
+    ATTRS = {
+        "title" : InitValue("Untitled"), 
+        "closed" : InitValue(0),
+        "icon" : InitValue(""),
+    }
     
     def __init__(self, child, **attrs):
         ContainerModel.__init__(self, [child], **attrs)
@@ -228,28 +232,110 @@ class Vertical(LayoutModel):
 # Atom models
 #===================================================================================================
 class AtomModel(BaseModel):
-    def __init__(self, **attrs):
-        BaseModel.__init__(self, **attrs)
     def __str__(self):
         return "%s[%s]" % (self.__class__.__name__, 
             " ".join("%s=%r" % (k, v) for k, v in self.computed_attrs.items()))
 
-class LabelAtom(AtomModel):
-    ATTRS = {"text" : InitValue(""), "valign" : InitValue("top"), "halign" : InitValue("left"), 
-        "native_width" : InitValue(None), "native_height" : InitValue(None)}
+COMMON_ATTRS = {
+    "bgcolor" : InitValue("auto"),
+    "fgcolor" : InitValue("auto"),
+    "visible" : InitValue(True),
+    "enabled" : InitValue(True),  
+}
 
-class ButtonAtom(AtomModel):
-    ATTRS = {"text" : InitValue(""), "clicked" : InitValue(0), "native_width" : InitValue(None), 
-        "native_height" : InitValue(None)}
+class NativeSizedAtom(AtomModel):
+    ATTRS = {
+        "native_width" : InitValue(None),
+        "native_height" : InitValue(None),
+    }
+    ATTRS.update(COMMON_ATTRS)
+    
+    def __init__(self, **attrs):
+        AtomModel.__init__(self, **attrs)
+        nw = LinVar("_nw%d" % (self.id))
+        nh = LinVar("_nh%d" % (self.id))
+        self.computed_attrs["native_width"] = InitValue(nw)
+        self.computed_attrs["native_height"] = InitValue(nh)
+        if self.width_cons is None:
+            self.width_cons = nw
+        if self.height_cons is None:
+            self.height_cons = nh
 
-class ImageAtom(AtomModel):
-    ATTRS = {"image" : InitValue(""), "native_width" : InitValue(None), "native_height" : InitValue(None)}
+class LabelAtom(NativeSizedAtom):
+    ATTRS = {
+        "text" : InitValue(""),
+        "valign" : InitValue("top"),
+        "halign" : InitValue("left"), 
+    }
+    ATTRS.update(NativeSizedAtom.ATTRS)
+
+class ImageAtom(NativeSizedAtom):
+    ATTRS = {
+        "image" : InitValue(""), 
+    }
+    ATTRS.update(NativeSizedAtom.ATTRS)
 
 class LineEditAtom(AtomModel):
-    ATTRS = {"text" : InitValue(""), "placeholder" : InitValue(""), "accepted" : InitValue(0)}
+    ATTRS = {
+        "text" : InitValue(""), 
+        "placeholder" : InitValue(""), 
+        "accepted" : InitValue(0),
+        "valign" : InitValue("top"),
+        "halign" : InitValue("left"), 
+    }
+    ATTRS.update(COMMON_ATTRS)
 
+class TextboxAtom(AtomModel):
+    ATTRS = {
+        "text" : InitValue(""), 
+        "placeholder" : InitValue(""), 
+        "valign" : InitValue("top"),
+        "halign" : InitValue("left"), 
+    }
+    ATTRS.update(COMMON_ATTRS)
 
+class ButtonAtom(AtomModel):
+    ATTRS = {
+        "text" : InitValue(""),
+        "clicked" : InitValue(0),
+    }
+    ATTRS.update(COMMON_ATTRS)
 
+class CheckboxAtom(AtomModel):
+    ATTRS = {
+        "text" : InitValue(""),
+        "checked" : InitValue(0),
+    }
+    ATTRS.update(COMMON_ATTRS)
+
+class RadioboxAtom(AtomModel):
+    ATTRS = {
+        "text" : InitValue(""),
+        "checked" : InitValue(0),
+    }
+    ATTRS.update(COMMON_ATTRS)
+
+class ComboboxAtom(AtomModel):
+    ATTRS = {
+        "items" : InitValue([]),
+        "selected_item" : InitValue(-1),
+    }
+    ATTRS.update(COMMON_ATTRS)
+
+class ListboxAtom(AtomModel):
+    ATTRS = {
+        "items" : InitValue([]),
+        "selected_item" : InitValue(-1),
+    }
+    ATTRS.update(COMMON_ATTRS)
+
+class SliderAtom(AtomModel):
+    ATTRS = {
+        "minvalue" : InitValue(0),
+        "maxvalue" : InitValue(100),
+        "value" : InitValue(0),
+    }
+    ATTRS.update(COMMON_ATTRS)
 
 
 
