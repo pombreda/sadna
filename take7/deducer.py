@@ -1,18 +1,6 @@
 import functools
 
 
-class uiproperty(object):
-    pass
-
-def uiaction(**params):
-    def deco(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            pass
-        return wrapper
-    return deco
-
-
 class ObserableObject(object):
     def __init__(self):
         self._callbacks = []
@@ -22,7 +10,7 @@ class ObserableObject(object):
         for cb in self._callbacks:
             cb(self, *extra)
 
-class ObservableList(object):
+class ObservableList(ObserableObject):
     def __init__(self, items = ()):
         self.items = list(items)
     def __repr__(self):
@@ -34,62 +22,59 @@ class ObservableList(object):
         self.items[index] = elem
         self._notify_watchers()
 
+class UIable(object):
+    def get_model(self):
+        raise NotImplementedError()
 
-class IRCClient(object):
-    pass
+class Param(UIable):
+    def __init__(self, name, default):
+        self.name = name
+        self.default = default
+    def get_value(self):
+        raise NotImplementedError()
 
+class StrParam(Param):
+    def __init__(self, name, default = ""):
+        Param.__init__(self, name, default)
+        self.lineed = LineEdit(text = default)
+    def get_model(self):
+        return self.lineed.attrs["text"]
+    def get_value(self):
+        raise NotImplementedError()
 
-class DialogQuit(Exception):
-    pass
+class IntParam(Param):
+    def __init__(self, name, default = None, minvalue = 0, maxvalue = 100):
+        Param.__init__(self, minvalue if default is None else default)
+        self.minvalue = minvalue
+        self.maxvalue = maxvalue
+        self.slider = Slider(value = self.default)
+    def get_value(self):
+        return self.slider.attrs["value"]
+    def get_model(self):
+        return self.slider
 
-class ChatLogin(object):
-    @uiaction(server = str, port = (int, 6667), nickname = str, password = str)
-    def send(self, server, port, nickname, password):
-        self.server = server
-        self.port = port
-        self.nickname = nickname
-        self.password = password
-        return DialogQuit()
-
-class ChatWindow(object):
-    history = uiproperty(ObservableList)
-    people = uiproperty(ObservableList)
-    rooms = uiproperty(ObservableList)
-    
-    def __init__(self, credentials):
-        self.credentials = credentials
-        try:
-            self.irc = IRCClient(credentials)
-        except IOError as ex:
-            raise DialogQuit("Server rejected your credentials", str(ex))
-        self.irc.on_recv(self._process_input)
-    
-    def _process_input(self, line):
-        if line.startswith("/join"):
-            self.people.append(line)
+class FunctionModel(UIable):
+    def __init__(self, func, params):
+        self.func = func
+        self.params = params
+        k = 5
+        self.button = Button(text = func.__name__, clicked = k)
+        k.watch(self.invoke)
+    def get_model(self):
+        if not self.params:
+            return self.button
+        elif len(self.params) == 1:
+            return H([self.params[0].get_model(), self.button])
         else:
-            self.history.append(line)
-    
-    @uiaction(text = str)
-    def send(self, text):
-        self.irc.send(text)
+            return V(
+                [p.get_model() for p in self.params] + [H([Padding(), self.button])]
+            )
+    def invoke(self):
+        kwargs = {p.name:p.get_value() for p in self.params}
+        self.func(**kwargs)
 
-    @uiaction(rooms.selection_changed)
-    def change_room(self):
-        pass
-
-    @uiaction(people.selection_changed)
-    def privmsg(self):
-        pass
-
-    model = (
-        history 
-        --- 
-        send) | (
-        rooms 
-        --- 
-        people)
-
+class WindowModel(UIable):
+    pass
 
 
 
