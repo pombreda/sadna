@@ -20,7 +20,7 @@ def consume(queue):
             break
         yield item
 
-class Client(object):
+class IRCClient(object):
     _counter = itertools.count()
     
     def __init__(self, server, port, nick, username = None, password = None):
@@ -28,7 +28,7 @@ class Client(object):
         self.nick = nick
         self._conn = self._irc.server()
         self._irc.add_global_handler("all_events", self._all_events)
-        self._conn.connect("irc.inter.net.il", port, nick)
+        self._conn.connect(server, port, nick)
         self._thd = threading.Thread(target = self._bg_thread)
         self._thd.setDaemon(True)
         self._thd.start()
@@ -42,7 +42,7 @@ class Client(object):
     def _bg_thread(self):
         try:
             while self._conn:
-                    self._irc.process_once()
+                self._irc.process_once()
         except (socket.error, EnvironmentError):
             if self._conn:
                 raise
@@ -71,14 +71,14 @@ class Client(object):
     
     def list_channels(self):
         channels = Queue()
-        def collect_names(event):
+        def collect_channles(event):
             if event.eventtype() == "list":
                 channels.put(event.arguments()[0])
             elif event.eventtype() == "listend":
                 self.unwatch(wid)
                 channels.put(StopIteration)
         
-        wid = self.watch(collect_names)
+        wid = self.watch(collect_channles)
         self._conn.list()
         return consume(channels)
     
@@ -91,6 +91,9 @@ class Client(object):
             channame = "#" + channame
         self._conn.join(channame)
         return Channel(self, channame)
+    
+    def private_chat(self, username):
+        return Channel(self, username)
 
 
 class Channel(object):
@@ -104,8 +107,8 @@ class Channel(object):
                 self._invoke(event.eventtype(), event.source(), event.arguments()[0])
             elif event.eventtype() == "privmsg" and event.target() == self.client.nick:
                 self._invoke("privmsg", event.source(), event.arguments()[0])
-            elif event.eventtype() in ("privnotice", "notice"):
-                self._invoke(event.eventtype(), event.source(), event.arguments()[0])
+            #elif event.eventtype() in ("privnotice", "notice"):
+            #    self._invoke(event.eventtype(), event.source(), event.arguments()[0])
         self._onmsg_wid = client.watch(on_message)
     
     def __enter__(self):

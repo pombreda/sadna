@@ -1,8 +1,9 @@
-import irc.client
+from irc2 import IRCClient
 
 
 class UIModel(object):
-    pass
+    def generate_model(self):
+        raise NotImplementedError()
 
 class ArgModel(UIModel):
     def __init__(self, argname, displayname = None, default = NotImplemented):
@@ -12,7 +13,6 @@ class ArgModel(UIModel):
 
 class StrArgModel(ArgModel):
     pass
-
 class PasswordArgModel(StrArgModel):
     pass
 class IntArgModel(ArgModel):
@@ -26,11 +26,28 @@ class FuncModel(UIModel):
         self.func = func
         if not self.displayname:
             self.displayname = func.__name__
-    def generate(self):
-        pass
+    def generate_model(self):
+        if not self.args:
+            return Button(text = self.displayname)
+        elif len(self.args) == 1:
+            a = self.args[0]
+            return ((Label(text = a.displayname) | a.generate_model()) 
+                if a.displayname else a.generate_model()) | Button(text = self.displayname)
+        else:
+            w = None
+            return (VLayout.foreach(
+                (Label(text = a).X(w, None) | a.generate_model()) for a in self.args) --- 
+                 Padding().X(w, None) | Button(text = self.displayname))
 
 class ClassModel(UIModel):
-    pass
+    @classmethod
+    def run(cls):
+        if isinstance(cls.__init__, UIModel):
+            kwargs = run_ui(cls.__init__.generate_model())
+            inst = cls(**kwargs)
+        else:
+            inst = cls()
+        return run_ui(inst.generate_model())
 
 class UIProperty(UIModel):
     def __init__(self, attrname, displayname = None):
@@ -56,60 +73,17 @@ class IRC(ClassModel):
         displayname = "Connect"
     )
     def __init__(self, host, port, nick, user, password):
-        self.host = host
-        self.port = port
-        self.nick = nick
-        self.user = user
-        self.password = password
-        self.client = irc.client.IRC()
-        self.server = self.client.server()
-        self.server.connect(host, port, nick, username = user, password = password)
+        self.client = IRCClient(host, port, nick, user, password)
 
-    @FuncModel([StrArgModel("text", displayname = "", )], displayname = ">>")
+    @FuncModel([StrArgModel("text", displayname = "", )], displayname = "Send")
     def send(self, text):
-        self.server.send(text)
+        self.client.send(text)
 
     def generate_model(self):
-        return 
+        y = None #LinVar("y")
+        return ((self.history.generate_model() --- self.send.generate_model().X(None, 25)) |
+                (self.rooms.generate_model().X(None, y) --- self.members.generate_model().X(None, y)))
 
-
-
-if __name__ == "__main__":
-    import threading, traceback, sys
-    #import logging
-    #logging.basicConfig(level = logging.DEBUG)
-    
-    client = irc.client.IRC()
-    server = client.server()
-
-    def all_events(server, event):
-        if event.eventtype() == "all_raw_messages":
-            return
-        print "%s %s->%s %s" % (event.eventtype(), event.source(), event.target(), event.arguments())
-    
-    client.add_global_handler("all_events", all_events)
-
-    #server.connect("irc.freenode.net", 6667, "moishe3287")
-    server.connect("irc.inter.net.il", 6667, "moishe3287")
-    server.join("#test873")
-        
-    thd = threading.Thread(target = client.process_forever)
-    thd.setDaemon(True)
-    thd.start()
-
-    try:
-        while True:
-            try:
-                inp = raw_input(">>> ")
-                if not inp.strip():
-                    continue
-                print ":::", eval(inp)
-            except (KeyboardInterrupt, EOFError):
-                break
-            except Exception:
-                print "".join(traceback.format_exception(*sys.exc_info()))
-    finally:
-        server.close()
 
 
 
