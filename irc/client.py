@@ -439,7 +439,7 @@ class Connection(object):
     def __init__(self, irclibobj):
         self.irclibobj = irclibobj
 
-    def _get_socket():
+    def _get_socket(self):
         raise IRCError("Not overridden")
 
     ##############################
@@ -1237,6 +1237,9 @@ class Event(object):
             self._arguments = arguments
         else:
             self._arguments = []
+    
+    def __repr__(self):
+        return "<Event %r (%r, %r, %r)>" % (self._eventtype, self._source, self._target, self._arguments)
 
     def eventtype(self):
         """Get the event type."""
