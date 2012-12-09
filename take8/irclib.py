@@ -129,7 +129,7 @@ class Channel(object):
         for callback in self._message_watchers:
             callback(msgtype, source, text)
     
-    def list_users(self):
+    def list_members(self):
         names = Queue()
         def collect_names(event):
             if event.eventtype() == "namreply" and event.arguments()[0] == '=' and event.arguments()[1].lower() == self.channame.lower():
@@ -151,7 +151,7 @@ class Channel(object):
 
 
 if __name__ == "__main__":
-    with Client("irc.inter.net.il", 6667, "moishe328") as client:
+    with IRCClient("irc.inter.net.il", 6667, "moishe328") as client:
         #channels = list(client.list_channels())
         chan = client.join("test873")
         names = list(chan.list_users())

@@ -61,6 +61,7 @@ class Target(ComputedValue):
         self._callbacks = []
     def when_changed(self, callback):
         self._callbacks.append(callback)
+        return callback
     def __call__(self, val):
         for cb in self._callbacks:
             cb(val)

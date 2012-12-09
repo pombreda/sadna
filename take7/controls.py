@@ -119,8 +119,17 @@ class Window(CompositeControl):
     def set_height(self, newheight):
         self.widget.resize(self.widget.width(), int(newheight))
 
+class BaseLayout(CompositeControl):
+    def _build_scroll(self, parent):
+        scroll = QtGui.QScrollArea(parent)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded) #ScrollBarAlwaysOff
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setWidgetResizable(False)
+        scroll.setLayout(QtGui.QVBoxLayout())
+        return scroll
+    
 @control_for(models.Horizontal)
-class HLayout(CompositeControl):
+class HLayout(BaseLayout):
     def _build(self, parent):
         #scrollarea = QtGui.QScrollArea(parent)
         #hor.setSizeHint(self.model.total_width)
@@ -138,8 +147,11 @@ class HLayout(CompositeControl):
         else:
             return self._build_fixed(parent)
 
-    def _build_fixed(self, parent):        
-        hor = QtGui.QWidget(parent)
+    def _build_fixed(self, parent):
+        scroll = self._build_scroll(parent)        
+        hor = QtGui.QWidget()
+        scroll.setWidget(hor)
+        
         for child in self.children:
             child.build(hor)
             off = self.model._get_offset(child.model)
@@ -147,7 +159,9 @@ class HLayout(CompositeControl):
                 #print "!! set_offset", child, val
                 child.widget.move(int(val), 0)
             self.solver.watch(off, set_offset)
-        return hor
+        self.solver.watch(self.model._total, lambda val: hor.setMinimumWidth(val))
+        self.solver.watch(self.model.height, lambda val: hor.setMinimumHeight(val))
+        return scroll
     
     def _build_with_splitter(self, parent):
         splitter = QtGui.QSplitter(Qt.Horizontal, parent)
@@ -176,12 +190,15 @@ class HLayout(CompositeControl):
         return splitter
 
 @control_for(models.Vertical)
-class VLayout(CompositeControl):
+class VLayout(BaseLayout):
     def _build(self, parent):
         return self._build_fixed(parent)
 
     def _build_fixed(self, parent):        
+        scroll = self._build_scroll(parent)        
         ver = QtGui.QWidget(parent)
+        scroll.setWidget(ver)
+
         for child in self.children:
             child.build(ver)
             off = self.model._get_offset(child.model)
@@ -189,8 +206,10 @@ class VLayout(CompositeControl):
                 #print "!! set_offset", child, val
                 child.widget.move(0, int(val))
             self.solver.watch(off, set_offset)
-        return ver
-    
+        self.solver.watch(self.model._total, lambda val: ver.setMinimumHeight(val))
+        self.solver.watch(self.model.width, lambda val: ver.setMinimumWidth(val))
+        return scroll
+
     def _build_with_splitter(self, parent):
         pass
 
@@ -341,28 +360,6 @@ def run(model):
 
 
 
-if __name__ == "__main__":
-    from linsys import LinVar
-    x = LinVar("x")
-    
-    k = models.Target("k")
-    
-    m = models.WindowModel(
-        models.Horizontal([
-            models.LabelAtom(text = "foobar", width=x),
-            models.LineEditAtom(placeholder="Type something...", width = 3*x, accepted = k),
-            models.ButtonAtom(text = "Send", width = 60, clicked = k),
-        ]),
-        #width = 300, height = 200,
-        title = "foo"
-    )
-    
-    def on_click(val):
-        print "on_click", val
-    
-    k.when_changed(on_click)
-    
-    run(m)
 
 
 
